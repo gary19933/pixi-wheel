@@ -28,7 +28,7 @@
   function defaultTemplate(){ return { name:'Default', terms:`By participating you agree:
 • One spin per session.
 • Prizes are non-transferable.
-• Organizer reserves the right to modify terms.`, prizesText:'🎁 iPhone 15 Pro | 1 | #25c77a\n💰 RM 50 Credit | 2 | #E9FFF7\n🎉 Mystery Gift | 1 | #25c77a\n🧧 Angpao RM 10 | 2 | #E9FFF7\n🍀 Free Spin | 3 | #25c77a\n💎 Mega Gift Box | 0.5 | #E9FFF7', assets:{bg:null,logo:null,spin:null,rewardsBtn:null,infoBtn:null,soundUnmute:null,soundMute:null,rewardsModal:null,rewardsClose:null,infoModal:null,infoClose:null}, colors:{pageBackground:{type:'color',style:'#0a2b22'},spinButton:{type:'gradient',style:'linear-gradient(to bottom, #24d58b, #0fb168)'}} }; }
+• Organizer reserves the right to modify terms.`, prizesText:'🎁 iPhone 15 Pro | 1 | #25c77a\n💰 RM 50 Credit | 2 | #E9FFF7\n🎉 Mystery Gift | 1 | #25c77a\n🧧 Angpao RM 10 | 2 | #E9FFF7\n🍀 Free Spin | 3 | #25c77a\n💎 Mega Gift Box | 0.5 | #E9FFF7', assets:{bg:null,logo:null,spin:null,rewardsBtn:null,infoBtn:null,soundUnmute:null,soundMute:null,rewardsModal:null,rewardsClose:null,infoModal:null,infoClose:null,wheel:null}, colors:{pageBackground:{type:'color',style:'#0a2b22'},spinButton:{type:'gradient',style:'linear-gradient(to bottom, #24d58b, #0fb168)'}} }; }
   function loadTemplates(){ try{ const arr=JSON.parse(localStorage.getItem(LS_KEY)||'[]'); if(Array.isArray(arr)&&arr.length) return arr; }catch{} const seed=[defaultTemplate()]; localStorage.setItem(LS_KEY, JSON.stringify(seed)); return seed; }
   function saveTemplates(){ localStorage.setItem(LS_KEY, JSON.stringify(templates)); }
   let templates = loadTemplates(); let activeIndex=0; let active=templates[activeIndex];
@@ -106,6 +106,10 @@
   const soundMuteFile = document.getElementById('soundMuteFile');
   const soundMuteClear = document.getElementById('soundMuteClear');
 
+  // Wheel Image elements
+  const wheelFile = document.getElementById('wheelFile');
+  const wheelClear = document.getElementById('wheelClear');
+
   // Modal Background elements
   const rewardsModalFile = document.getElementById('rewardsModalFile');
   const rewardsModalClear = document.getElementById('rewardsModalClear');
@@ -128,7 +132,19 @@
   const forceSelect = document.getElementById('forceSelect');
   const quickAdd  = document.getElementById('quickAdd');
   const addBtn    = document.getElementById('addBtn');
+  const wheelSizeDisplay = document.getElementById('wheelSizeDisplay');
+  const wheelDimensions = document.getElementById('wheelDimensions');
   document.getElementById('apiLabel').textContent = CONFIG.API_ENDPOINT;
+
+  // Function to update wheel size display
+  function updateWheelSizeDisplay() {
+    const sizeMultiplier = parseFloat(sizeRange.value);
+    const baseSize = 400; // Base wheel size in pixels
+    const actualSize = Math.round(baseSize * sizeMultiplier);
+    
+    wheelSizeDisplay.textContent = `${sizeMultiplier.toFixed(2)}x`;
+    wheelDimensions.textContent = `(${actualSize}×${actualSize}px)`;
+  }
 
   function refreshTemplateUI(){
     templateSelect.innerHTML = templates.map((t,i)=>`<option value="${i}">${t.name||('Template '+(i+1))}</option>`).join('');
@@ -181,6 +197,11 @@
     if(active.assets.infoModal) {
       // Modal background would be applied when opening info modal
     }
+    
+    // Wheel image is automatically handled by the drawWheel function
+    
+    // Update wheel size display
+    updateWheelSizeDisplay();
   }
 
   function setActive(i){ activeIndex=i; active=templates[activeIndex]; SLICES=parseFromText(active.prizesText); refreshTemplateUI(); drawBackground(); drawWheel(true); drawLogo(); showToast('✅ Template loaded'); }
@@ -242,6 +263,10 @@
   
   soundMuteFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.soundMute=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Mute button image set'); });
   soundMuteClear.addEventListener('click', ()=>{ active.assets.soundMute=null; saveTemplates(); });
+
+  // Wheel Image handlers
+  wheelFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.wheel=await fileToDataURL(f); saveTemplates(); drawWheel(true); showToast('🖼️ Wheel image set - Prize weights still work!'); });
+  wheelClear.addEventListener('click', ()=>{ active.assets.wheel=null; saveTemplates(); drawWheel(true); });
 
   // Modal Background handlers
   rewardsModalFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.rewardsModal=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Rewards modal background set'); });
@@ -674,26 +699,44 @@
 
   // Size + sound controls ----------------------------------------------------
   const sizeRange=document.getElementById('sizeRange');
-  sizeRange.addEventListener('input', ()=>{ sizeMultiplier=parseFloat(sizeRange.value); drawWheel(); });
+  sizeRange.addEventListener('input', ()=>{ sizeMultiplier=parseFloat(sizeRange.value); drawWheel(); updateWheelSizeDisplay(); });
   
   // Floating panel: collapse + drag + persist -------------------------------
   const fab = document.getElementById('fab');
+  
   fab.addEventListener('click', ()=>{
-    panel.classList.remove('collapsed');
-    // If panel is off-screen, reset to top-left
-    const rect = panel.getBoundingClientRect();
-    const vw = window.innerWidth, vh = window.innerHeight;
-    if(rect.right < 0 || rect.bottom < 0 || rect.left > vw || rect.top > vh){
-      panel.style.left = '16px'; panel.style.top = '16px';
-      localStorage.setItem(POS_KEY, JSON.stringify({x:16,y:16}));
-    }
-    localStorage.setItem(COLLAPSE_KEY,'0');
+    panel.classList.toggle('collapsed');
+    localStorage.setItem(COLLAPSE_KEY, panel.classList.contains('collapsed')? '1':'0');
   });
 
   const POS_KEY='spinWheel.config.pos'; const COLLAPSE_KEY='spinWheel.config.collapsed';
   btnMinMax.addEventListener('click', ()=>{ panel.classList.toggle('collapsed'); localStorage.setItem(COLLAPSE_KEY, panel.classList.contains('collapsed')? '1':'0'); });
-  (function initCollapse(){ const saved=localStorage.getItem(COLLAPSE_KEY); if(saved===null){ panel.classList.add('collapsed'); } else { if(saved==='1') panel.classList.add('collapsed'); else panel.classList.remove('collapsed'); } })();
+  (function initCollapse(){ 
+    const saved=localStorage.getItem(COLLAPSE_KEY); 
+    const isMobile = window.innerWidth <= 560;
+    
+    if(saved===null){ 
+      // Default: collapsed on mobile, expanded on desktop
+      if(isMobile) {
+        panel.classList.add('collapsed'); 
+      }
+    } else { 
+      if(saved==='1') panel.classList.add('collapsed'); 
+      else panel.classList.remove('collapsed'); 
+    } 
+  })();
   (function restorePos(){ const s=localStorage.getItem(POS_KEY); if(!s) return; try{ const {x,y}=JSON.parse(s); const vw=window.innerWidth, vh=window.innerHeight; const nx = Math.min(vw-120, Math.max(8, x)); const ny = Math.min(vh-80, Math.max(8, y)); panel.style.left=nx+'px'; panel.style.top=ny+'px'; }catch{} })();
+  
+  // Handle mobile/desktop transitions
+  window.addEventListener('resize', ()=>{
+    const isMobile = window.innerWidth <= 560;
+    const saved = localStorage.getItem(COLLAPSE_KEY);
+    
+    // If no saved preference, apply mobile default
+    if(saved === null && isMobile) {
+      panel.classList.add('collapsed');
+    }
+  });
   (function makeDraggable(){ let drag=false, dx=0, dy=0; function clamp(v,min,max){ return Math.min(max, Math.max(min, v)); }
     function onDown(e){ drag=true; const rect=panel.getBoundingClientRect(); const cx=(e.touches? e.touches[0].clientX: e.clientX); const cy=(e.touches? e.touches[0].clientY: e.clientY); dx=cx-rect.left; dy=cy-rect.top; e.preventDefault(); }
     function onMove(e){ if(!drag) return; const cx=(e.touches? e.touches[0].clientX: e.clientX); const cy=(e.touches? e.touches[0].clientY: e.clientY); const vw=window.innerWidth, vh=window.innerHeight; const w=panel.offsetWidth, h=panel.offsetHeight; let nx=clamp(cx-dx, 8, vw - w - 8); let ny=clamp(cy-dy, 8, vh - 8); panel.style.left=nx+'px'; panel.style.top=ny+'px'; panel.style.right='auto'; localStorage.setItem(POS_KEY, JSON.stringify({x:nx,y:ny})); }
@@ -1029,9 +1072,12 @@ function generateStandaloneHTML(templateData) {
     function spin(){
       if(spinning) return;
       if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+      
+      // Always use weighted selection - prize weights are ALWAYS respected
       const chosen = pickWeighted(SLICES);
       const idx = SLICES.indexOf(chosen);
       const targetCenter = centerAngleForIndex(idx);
+      
       const fullSpins = (5 + Math.floor(Math.random()*3)) * TWO_PI;
       rotStart = wheel.rotation % TWO_PI;
       rotEnd   = targetCenter + fullSpins;
