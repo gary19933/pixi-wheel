@@ -1,7 +1,7 @@
 (async function(){
   try{
   // ---- Config ---------------------------------------------------------------
-  const CONFIG = { API_ENDPOINT: '/api/claim', ENABLE_SFX: true, BASE_RADIUS: 360, HUB_RADIUS: 70 };
+  const CONFIG = { API_ENDPOINT: '/api/claim', ENABLE_SFX: true, BASE_RADIUS: 400, HUB_RADIUS: 80 };
 
   // ---- Pixi app ------------------------------------------------------------
   const app = new PIXI.Application({ resizeTo: document.getElementById('game'), backgroundAlpha: 0, antialias: true, autoDensity: true, powerPreference: 'high-performance' });
@@ -12,15 +12,21 @@
   const root = new PIXI.Container();
   const bgLayer = new PIXI.Container();
   const uiLayer = new PIXI.Container();
-  app.stage.addChild(bgLayer); app.stage.addChild(root); app.stage.addChild(uiLayer);
+  const topbarLayer = new PIXI.Container();
+  const modalLayer = new PIXI.Container();
+  app.stage.addChild(bgLayer); 
+  app.stage.addChild(root); 
+  app.stage.addChild(uiLayer);
+  app.stage.addChild(topbarLayer);
+  app.stage.addChild(modalLayer);
 
   const wheelContainer = new PIXI.Container();
   root.addChild(wheelContainer);
 
   // Responsive ---------------------------------------------------------------
-  let sizeMultiplier = 1.3; let autoMultiplier = 1;
+  let sizeMultiplier = 1.6; let autoMultiplier = 1;
   function computeAutoMultiplier(){ const vw=app.renderer.width, vh=app.renderer.height; const minEdge=Math.min(vw,vh); const targetDiameter=minEdge*0.8; autoMultiplier = targetDiameter/(CONFIG.BASE_RADIUS*2); autoMultiplier=Math.max(0.6, Math.min(1.6, autoMultiplier)); }
-  function layout(){ const vw=app.renderer.width, vh=app.renderer.height; const scale=Math.min(vw/DESIGN.w, vh/DESIGN.h); root.scale.set(scale); root.x=vw/2-(DESIGN.w*scale)/2; root.y=vh/2-(DESIGN.h*scale)/2; wheelContainer.x=DESIGN.w/2; wheelContainer.y=(vw>vh)? DESIGN.h/2-20 : DESIGN.h/2-120; drawBackground(); computeAutoMultiplier(); drawWheel(); drawLogo(); }
+  function layout(){ const vw=app.renderer.width, vh=app.renderer.height; const scale=Math.min(vw/DESIGN.w, vh/DESIGN.h); root.scale.set(scale); root.x=vw/2-(DESIGN.w*scale)/2; root.y=vh/2-(DESIGN.h*scale)/2; wheelContainer.x=DESIGN.w/2; wheelContainer.y=(vw>vh)? DESIGN.h/2-20 : DESIGN.h/2-120; drawBackground(); computeAutoMultiplier(); drawWheel(); drawLogo(); drawTopbar(); drawSpinButton(); }
   app.renderer.on('resize', layout);
 
   // ---- Templates -----------------------------------------------------------
@@ -28,7 +34,7 @@
   function defaultTemplate(){ return { name:'Default', terms:`By participating you agree:
 • One spin per session.
 • Prizes are non-transferable.
-• Organizer reserves the right to modify terms.`, prizesText:'🎁 iPhone 15 Pro | 1 | #25c77a\n💰 RM 50 Credit | 2 | #E9FFF7\n🎉 Mystery Gift | 1 | #25c77a\n🧧 Angpao RM 10 | 2 | #E9FFF7\n🍀 Free Spin | 3 | #25c77a\n💎 Mega Gift Box | 0.5 | #E9FFF7', assets:{bg:null,logo:null,spin:null,rewardsBtn:null,infoBtn:null,soundUnmute:null,soundMute:null,rewardsModal:null,rewardsClose:null,infoModal:null,infoClose:null,wheel:null}, colors:{pageBackground:{type:'color',style:'#0a2b22'},spinButton:{type:'gradient',style:'linear-gradient(to bottom, #24d58b, #0fb168)'}} }; }
+• Organizer reserves the right to modify terms.`, prizesText:'🎁 iPhone 15 Pro | 1 | #25c77a\n💰 RM 50 Credit | 2 | #E9FFF7\n🎉 Mystery Gift | 1 | #25c77a\n🧧 Angpao RM 10 | 2 | #E9FFF7\n🍀 Free Spin | 3 | #25c77a\n💎 Mega Gift Box | 0.5 | #E9FFF7', assets:{bg:null,logo:null,spin:null,rewardsBtn:null,infoBtn:null,soundUnmute:null,soundMute:null,rewardsModal:null,rewardsClose:null,infoModal:null,infoClose:null,wheel:null}, colors:{pageBackground:{type:'color',style:'#0a2b22'},spinButton:{type:'gradient',style:'linear-gradient(to bottom, #24d58b, #0fb168)'}}, settings:{claimAction:'modal',claimUrl:''} }; }
   function loadTemplates(){ try{ const arr=JSON.parse(localStorage.getItem(LS_KEY)||'[]'); if(Array.isArray(arr)&&arr.length) return arr; }catch{} const seed=[defaultTemplate()]; localStorage.setItem(LS_KEY, JSON.stringify(seed)); return seed; }
   function saveTemplates(){ localStorage.setItem(LS_KEY, JSON.stringify(templates)); }
   let templates = loadTemplates(); let activeIndex=0; let active=templates[activeIndex];
@@ -43,9 +49,6 @@
 
   // ---- UI refs -------------------------------------------------------------
   const panel = document.getElementById('configPanel');
-  const btnRewards = document.getElementById('btnRewards');
-  const btnInfo = document.getElementById('btnInfo');
-  const btnSound = document.getElementById('btnSound');
   const rewardsModal = document.getElementById('rewardsModal');
   const infoModal = document.getElementById('infoModal');
   const rewardsList = document.getElementById('rewardsList');
@@ -356,8 +359,14 @@
       btnGradientDirection.value = 'to bottom';
       
       // Reset wheel size
-      sizeRange.value = '1.3';
-      sizeMultiplier = 1.3;
+      sizeRange.value = '1.6';
+      sizeMultiplier = 1.6;
+      
+      // Reset claim button settings
+      active.settings = defaultTpl.settings;
+      claimAction.value = 'modal';
+      claimUrl.value = '';
+      claimUrlRow.style.display = 'none';
       
       // Clear file inputs
       bgFile.value = '';
@@ -601,7 +610,12 @@
   const audioCtx=(window.AudioContext? new AudioContext(): null);
   let muted = false; // UI sound state
   function isSoundOn(){ return !muted; }
-  function updateSoundButton(){ btnSound.textContent = (isSoundOn()? '🔊 Sound' : '🔇 Sound'); }
+  function updateSoundButton(){ 
+    // Update canvas sound button text
+    if (soundButton && soundButton.children[0]) {
+      soundButton.children[0].text = (isSoundOn()? '🔊 Sound' : '🔇 Sound');
+    }
+  }
   function playTone(f=880,t=0.15,type='triangle',v=0.08){
     if(!audioCtx || !isSoundOn()) return;
     const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
@@ -653,13 +667,24 @@
   });
 
   // Interactions -------------------------------------------------------------
-  const spinBtn=document.getElementById('spinBtn');
-  spinBtn.addEventListener('click', spin);
-  app.view.addEventListener('pointerdown', (e)=>{ if(e.pointerType!=='mouse') spin(); });
-  // Top bar actions
-  btnRewards.addEventListener('click', ()=> openRewards());
-  btnInfo.addEventListener('click', ()=> openInfo());
-  btnSound.addEventListener('click', ()=>{ muted = !muted; updateSoundButton(); });
+  // Only allow touch spin on the wheel area, not the entire canvas
+  app.view.addEventListener('pointerdown', (e)=>{ 
+    if(e.pointerType!=='mouse') {
+      // Check if click is within wheel area (approximate center area)
+      const rect = app.view.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+      
+      // Only spin if click is within wheel radius (approximate 320px radius for 1.6x scale)
+      if(distance < 320) {
+        spin();
+      }
+    }
+  });
+  // Modal close handlers
   document.querySelectorAll('.modal-close').forEach(btn=> btn.addEventListener('click', (e)=> closeModal(e.target.getAttribute('data-close'))));
 
   function spin(){
@@ -673,15 +698,21 @@
     rotStart = wheel.rotation % TWO_PI;
     rotEnd   = targetCenter + fullSpins;
     duration = 4.25 + Math.random()*0.9;
-    t = 0; spinning = true; spinBtn.disabled = true;
-    showToast('Spinning for your gift...'); sfxSpin();
+    t = 0; spinning = true;
+    updateSpinButtonState(); // Update button state
+    sfxSpin();
     spin._result = chosen;
   }
   async function onSpinComplete(){
-    spinBtn.disabled=false;
+    spinning = false; // Reset spinning state
+    updateSpinButtonState(); // Update button state
     const res=spin._result;
     addHistory({ ts: Date.now(), template: active.name, prize: res.label });
-    showToast('🎊 You won: '+res.label); sfxWin(); spawnConfetti(140);
+    
+    // Celebration effects
+    sfxWin(); 
+    spawnConfetti(140);
+    
     try{
       const response=await fetch(CONFIG.API_ENDPOINT,{
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -689,11 +720,13 @@
       });
       if(!response.ok) throw new Error('HTTP '+response.status);
       await response.json().catch(()=>({ok:true}));
-      showToast('✅ Saved to server');
     }catch(err){ 
       // Silently handle API errors without showing user notification
       console.warn('API error', err); 
     }
+    
+    // Show congratulations modal for prize announcement
+    showCongratsModal(res);
   }
   function showToast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.style.display='block'; clearTimeout(showToast._t); showToast._t=setTimeout(()=> el.style.display='none', 2200); }
 
@@ -754,8 +787,681 @@
   function formatTs(ts){ const d=new Date(ts); return d.toLocaleString(); }
   function openModal(id){ const el=document.querySelector(id); if(el) el.classList.add('show'); }
   function closeModal(id){ const el=document.querySelector(id); if(el) el.classList.remove('show'); }
-  function openRewards(){ const arr=loadHistory().slice().reverse(); rewardsList.innerHTML = arr.length? arr.map(r=>`<li><span>${r.prize}</span><small>${formatTs(r.ts)} • ${r.template||''}</small></li>`).join('') : '<li>No spins yet.</li>'; openModal('#rewardsModal'); }
+  function openRewards(){ 
+    const arr=loadHistory().slice().reverse(); 
+    
+    // Add sample data if no history exists
+    if(arr.length === 0) {
+      const sampleRewards = [
+        { prize: '+1 Credit', ts: Date.now() - 1000 * 60 * 30, icon: '💎' },
+        { prize: 'Thank You For Playing', ts: Date.now() - 1000 * 60 * 60 * 2, icon: '🎁' },
+        { prize: '+1 Credit', ts: Date.now() - 1000 * 60 * 60 * 24 * 7, icon: '💎' },
+        { prize: '+2 Credits', ts: Date.now() - 1000 * 60 * 60 * 24 * 30, icon: '💎💎' },
+        { prize: '+1 Credit', ts: Date.now() - 1000 * 60 * 60 * 24 * 45, icon: '💎' }
+      ];
+      rewardsList.innerHTML = sampleRewards.map(r=>`
+        <li>
+          <div class="prize-icon">${r.icon}</div>
+          <div class="prize-details">
+            <div class="prize-date">${formatTs(r.ts)}</div>
+            <div class="prize-name">${r.prize}</div>
+          </div>
+        </li>
+      `).join('');
+    } else {
+      rewardsList.innerHTML = arr.map(r=>`
+        <li>
+          <div class="prize-icon">💎</div>
+          <div class="prize-details">
+            <div class="prize-date">${formatTs(r.ts)}</div>
+            <div class="prize-name">${r.prize}</div>
+          </div>
+        </li>
+      `).join('');
+    }
+    
+    openModal('#rewardsModal'); 
+  }
   function openInfo(){ termsBody.textContent = (active.terms||''); openModal('#infoModal'); }
+  
+  // Congratulations modal functionality
+  const claimAction = document.getElementById('claimAction');
+  const claimUrl = document.getElementById('claimUrl');
+  const claimUrlRow = document.getElementById('claimUrlRow');
+  
+  function showCongratsModal(prize) {
+    // Show canvas congratulations modal
+    showCanvasCongratsModal(prize);
+  }
+  
+  function showCanvasCongratsModal(prize) {
+    // Clear any existing congratulations modal
+    modalLayer.removeChildren();
+    
+    // Create congratulations modal background
+    const modalBg = new PIXI.Graphics();
+    modalBg.beginFill(0x000000, 0.8);
+    modalBg.drawRect(0, 0, app.screen.width, app.screen.height);
+    modalBg.endFill();
+    modalBg.interactive = true;
+    modalBg.cursor = 'pointer';
+    modalBg.on('pointerdown', () => hideCanvasCongratsModal());
+    modalLayer.addChild(modalBg);
+    
+    // Create congratulations card
+    const cardWidth = 400;
+    const cardHeight = 300;
+    const cardX = (app.screen.width - cardWidth) / 2;
+    const cardY = (app.screen.height - cardHeight) / 2;
+    console.log('Screen dimensions:', app.screen.width, 'x', app.screen.height);
+    console.log('Calculated modal position:', cardX, cardY);
+    
+    const card = new PIXI.Graphics();
+    card.beginFill(0x1a1a1a);
+    card.drawRoundedRect(0, 0, cardWidth, cardHeight, 20);
+    card.endFill();
+    
+    // Add gradient border effect
+    const border = new PIXI.Graphics();
+    border.lineStyle(3, 0x8B5CF6);
+    border.drawRoundedRect(0, 0, cardWidth, cardHeight, 20);
+    card.addChild(border);
+    
+    card.x = cardX;
+    card.y = cardY;
+    modalLayer.addChild(card);
+    
+    // Add ribbon decoration
+    const ribbon = new PIXI.Text('🎀', {
+      fontFamily: 'Arial',
+      fontSize: 32,
+      fill: 0xEC4899
+    });
+    ribbon.anchor.set(0.5);
+    ribbon.x = cardWidth / 2;
+    ribbon.y = 30;
+    card.addChild(ribbon);
+    
+    // Close button
+    const closeBtn = new PIXI.Graphics();
+    closeBtn.beginFill(0x333333);
+    closeBtn.drawCircle(0, 0, 20);
+    closeBtn.endFill();
+    closeBtn.x = cardWidth - 30;
+    closeBtn.y = 30;
+    closeBtn.interactive = true;
+    closeBtn.cursor = 'pointer';
+    closeBtn.on('pointerdown', () => hideCanvasCongratsModal());
+    card.addChild(closeBtn);
+    
+    const closeText = new PIXI.Text('×', {
+      fontFamily: 'Arial',
+      fontSize: 20,
+      fill: 0xffffff,
+      fontWeight: 'bold'
+    });
+    closeText.anchor.set(0.5);
+    closeText.x = cardWidth - 30;
+    closeText.y = 30;
+    card.addChild(closeText);
+    
+    // Congratulations title
+    const title = new PIXI.Text('CONGRATULATIONS!', {
+      fontFamily: 'Arial',
+      fontSize: 24,
+      fill: 0x8B5CF6,
+      fontWeight: 'bold'
+    });
+    title.anchor.set(0.5);
+    title.x = cardWidth / 2;
+    title.y = 80;
+    card.addChild(title);
+    
+    // Subtitle
+    const subtitle = new PIXI.Text('You receive', {
+      fontFamily: 'Arial',
+      fontSize: 16,
+      fill: 0xffffff
+    });
+    subtitle.anchor.set(0.5);
+    subtitle.x = cardWidth / 2;
+    subtitle.y = 120;
+    card.addChild(subtitle);
+    
+    // Prize display
+    const prizeText = new PIXI.Text(prize.label, {
+      fontFamily: 'Arial',
+      fontSize: 28,
+      fill: 0xEC4899,
+      fontWeight: 'bold'
+    });
+    prizeText.anchor.set(0.5);
+    prizeText.x = cardWidth / 2;
+    prizeText.y = 160;
+    card.addChild(prizeText);
+    
+    // Generate diamonds based on prize
+    const diamondCount = Math.min(5, Math.max(1, Math.floor(Math.random() * 3) + 1));
+    const diamonds = new PIXI.Text('💎'.repeat(diamondCount), {
+      fontFamily: 'Arial',
+      fontSize: 24
+    });
+    diamonds.anchor.set(0.5);
+    diamonds.x = cardWidth / 2;
+    diamonds.y = 190;
+    card.addChild(diamonds);
+    
+    // Claim button - make it larger and more prominent
+    const claimBtn = new PIXI.Graphics();
+    claimBtn.beginFill(0xEC4899);
+    claimBtn.drawRoundedRect(0, 0, 150, 50, 10);
+    claimBtn.endFill();
+    claimBtn.x = (cardWidth - 150) / 2;
+    claimBtn.y = 220;
+    claimBtn.interactive = true;
+    claimBtn.cursor = 'pointer';
+    claimBtn.buttonMode = true;
+    
+    // Try multiple event types
+    claimBtn.on('pointerdown', (event) => {
+      event.stopPropagation();
+      
+      // Handle claim action
+      if (active.settings && active.settings.claimAction === 'redirect' && active.settings.claimUrl) {
+        window.open(active.settings.claimUrl, '_blank');
+      } else {
+        // Default: directly call the rewards modal function
+        hideCanvasCongratsModal();
+        // Add a small delay to ensure the congratulations modal is fully closed
+        setTimeout(() => {
+          showModal('rewards');
+        }, 100);
+      }
+    });
+    
+    claimBtn.on('click', (event) => {
+      event.stopPropagation();
+      
+      // Handle claim action
+      if (active.settings && active.settings.claimAction === 'redirect' && active.settings.claimUrl) {
+        window.open(active.settings.claimUrl, '_blank');
+      } else {
+        // Default: directly call the rewards modal function
+        hideCanvasCongratsModal();
+        // Add a small delay to ensure the congratulations modal is fully closed
+        setTimeout(() => {
+          showModal('rewards');
+        }, 100);
+      }
+    });
+    
+    claimBtn.on('tap', (event) => {
+      event.stopPropagation();
+      
+      // Handle claim action
+      if (active.settings && active.settings.claimAction === 'redirect' && active.settings.claimUrl) {
+        window.open(active.settings.claimUrl, '_blank');
+      } else {
+        // Default: directly call the rewards modal function
+        hideCanvasCongratsModal();
+        // Add a small delay to ensure the congratulations modal is fully closed
+        setTimeout(() => {
+          showModal('rewards');
+        }, 100);
+      }
+    });
+    
+    // Add hover effects
+    claimBtn.on('pointerover', () => {
+      claimBtn.alpha = 0.8;
+    });
+    
+    claimBtn.on('pointerout', () => {
+      claimBtn.alpha = 1.0;
+    });
+    
+    const claimText = new PIXI.Text('CLAIM', {
+      fontFamily: 'Arial',
+      fontSize: 18,
+      fill: 0xffffff,
+      fontWeight: 'bold'
+    });
+    claimText.anchor.set(0.5);
+    claimText.x = 75; // Center within larger button
+    claimText.y = 25; // Center within larger button
+    claimBtn.addChild(claimText);
+    
+    card.addChild(claimBtn);
+  }
+  
+  function hideCanvasCongratsModal() {
+    modalLayer.removeChildren();
+  }
+  
+  // Claim action dropdown functionality
+  claimAction.addEventListener('change', () => {
+    if (claimAction.value === 'redirect') {
+      claimUrlRow.style.display = 'block';
+    } else {
+      claimUrlRow.style.display = 'none';
+    }
+    
+    // Save settings
+    if (!active.settings) active.settings = {};
+    active.settings.claimAction = claimAction.value;
+    saveTemplates();
+  });
+
+  // Claim URL input functionality
+  claimUrl.addEventListener('input', () => {
+    if (!active.settings) active.settings = {};
+    active.settings.claimUrl = claimUrl.value;
+    saveTemplates();
+  });
+
+  // Canvas-based topbar and modals
+  let topbarButtons = [];
+  let currentModal = null;
+  let soundButton = null; // Store reference to sound button for updates
+  
+  function drawTopbar() {
+    topbarLayer.removeChildren();
+    topbarButtons = [];
+    
+    const vw = app.renderer.width;
+    const vh = app.renderer.height;
+    const buttonWidth = 80;
+    const buttonHeight = 35;
+    const gap = 10;
+    const rightMargin = 16;
+    const topMargin = 16;
+    
+    // Create buttons
+    const buttons = [
+      { id: 'btnRewards', text: '🏆 Rewards', action: 'rewards' },
+      { id: 'btnInfo', text: 'ℹ️ Info', action: 'info' },
+      { id: 'btnSound', text: '🔊 Sound', action: 'sound' }
+    ];
+    
+    buttons.forEach((btn, index) => {
+      const button = new PIXI.Graphics();
+      const x = vw - rightMargin - (buttonWidth + gap) * (buttons.length - index);
+      const y = topMargin;
+      
+      // Button background
+      button.beginFill(0x17342c);
+      button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+      button.endFill();
+      
+      // Button border
+      button.lineStyle(1, 0x23493d);
+      button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+      
+      // Button text
+      const text = new PIXI.Text(btn.text, {
+        fontFamily: 'Arial',
+        fontSize: 12,
+        fill: 0xd9fff2,
+        fontWeight: 'bold'
+      });
+      text.anchor.set(0.5);
+      text.x = buttonWidth / 2;
+      text.y = buttonHeight / 2;
+      button.addChild(text);
+      
+      button.x = x;
+      button.y = y;
+      button.interactive = true;
+      button.buttonMode = true;
+      button.cursor = 'pointer';
+      
+      // Hover effects
+      button.on('pointerover', () => {
+        button.clear();
+        button.beginFill(0x1b3e33);
+        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+        button.endFill();
+        button.lineStyle(1, 0x23493d);
+        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+        button.addChild(text);
+      });
+      
+      button.on('pointerout', () => {
+        button.clear();
+        button.beginFill(0x17342c);
+        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+        button.endFill();
+        button.lineStyle(1, 0x23493d);
+        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+        button.addChild(text);
+      });
+      
+        // Click handler
+        button.on('pointerdown', () => {
+          if (btn.action === 'rewards') {
+            showModal('rewards');
+          } else if (btn.action === 'info') {
+            showModal('info');
+          } else if (btn.action === 'sound') {
+            // Toggle sound
+            muted = !muted;
+            updateSoundButton();
+          }
+        });
+        
+        topbarLayer.addChild(button);
+        topbarButtons.push(button);
+        
+        // Store reference to sound button for updates
+        if (btn.action === 'sound') {
+          soundButton = button;
+        }
+    });
+  }
+  
+  function showModal(type) {
+    modalLayer.removeChildren();
+    currentModal = type;
+    
+    const vw = app.renderer.width;
+    const vh = app.renderer.height;
+    
+    // Modal background
+    const modalBg = new PIXI.Graphics();
+    modalBg.beginFill(0x000000, 0.55);
+    modalBg.drawRect(0, 0, vw, vh);
+    modalBg.endFill();
+    modalBg.interactive = true;
+    modalBg.on('pointerdown', () => hideModal());
+    modalLayer.addChild(modalBg);
+    
+    // Modal card
+    const cardWidth = Math.min(vw * 0.9, 720);
+    const cardHeight = Math.min(vh * 0.8, 600);
+    const cardX = (vw - cardWidth) / 2;
+    const cardY = (vh - cardHeight) / 2;
+    
+    const card = new PIXI.Graphics();
+    card.beginFill(0x0e1f1a);
+    card.lineStyle(1, 0x204a3e);
+    card.drawRoundedRect(0, 0, cardWidth, cardHeight, 14);
+    card.endFill();
+    card.x = cardX;
+    card.y = cardY;
+    modalLayer.addChild(card);
+    
+    // Modal header
+    const headerHeight = 50;
+    const header = new PIXI.Graphics();
+    header.beginFill(0x0e1f1a);
+    header.lineStyle(1, 0x204a3e, 0, 0);
+    header.drawRect(0, 0, cardWidth, headerHeight);
+    header.endFill();
+    header.lineStyle(1, 0x204a3e);
+    header.moveTo(0, headerHeight);
+    header.lineTo(cardWidth, headerHeight);
+    card.addChild(header);
+    
+    // Header text
+    const titleText = new PIXI.Text(
+      type === 'rewards' ? 'REWARDS HISTORY' : 'TERMS & CONDITIONS',
+      {
+        fontFamily: 'Arial',
+        fontSize: 14,
+        fill: 0xa3ffe0,
+        fontWeight: 'bold'
+      }
+    );
+    titleText.x = 20;
+    titleText.y = 15;
+    card.addChild(titleText);
+    
+    // Close button
+    const closeBtn = new PIXI.Graphics();
+    closeBtn.beginFill(0x17342c);
+    closeBtn.drawRoundedRect(0, 0, 30, 25, 8);
+    closeBtn.endFill();
+    closeBtn.x = cardWidth - 40;
+    closeBtn.y = 12;
+    closeBtn.interactive = true;
+    closeBtn.buttonMode = true;
+    closeBtn.on('pointerdown', () => hideModal());
+    
+    const closeText = new PIXI.Text('×', {
+      fontFamily: 'Arial',
+      fontSize: 16,
+      fill: 0xc9ffe9,
+      fontWeight: 'bold'
+    });
+    closeText.anchor.set(0.5);
+    closeText.x = 15;
+    closeText.y = 12;
+    closeBtn.addChild(closeText);
+    card.addChild(closeBtn);
+    
+    // Modal content
+    const contentY = headerHeight + 20;
+    const contentHeight = cardHeight - headerHeight - 40;
+    
+    if (type === 'rewards') {
+      // Get rewards history from actual data
+      const rewardsHistory = loadHistory().slice().reverse();
+      if (rewardsHistory.length === 0) {
+        // Empty state
+        const emptyText = new PIXI.Text('No prizes won yet. Spin the wheel to win prizes!', {
+          fontFamily: 'Arial',
+          fontSize: 16,
+          fill: 0xe8fff5,
+          wordWrap: true,
+          wordWrapWidth: cardWidth - 40
+        });
+        emptyText.x = 20;
+        emptyText.y = contentY;
+        card.addChild(emptyText);
+      } else {
+        // Create grid layout for rewards
+        const itemHeight = 60;
+        const itemWidth = cardWidth - 40;
+        const startY = contentY;
+        
+        rewardsHistory.slice(0, 6).forEach((reward, index) => {
+          const itemY = startY + (index * (itemHeight + 12));
+          
+          // Create reward item background with gradient effect
+          const itemBg = new PIXI.Graphics();
+          itemBg.beginFill(0x8B5CF6); // Purple gradient start
+          itemBg.drawRoundedRect(0, 0, itemWidth, itemHeight, 12);
+          itemBg.endFill();
+          
+          // Add gradient effect (simulated)
+          const gradientOverlay = new PIXI.Graphics();
+          gradientOverlay.beginFill(0xEC4899, 0.3); // Pink gradient end
+          gradientOverlay.drawRoundedRect(0, 0, itemWidth, itemHeight, 12);
+          gradientOverlay.endFill();
+          itemBg.addChild(gradientOverlay);
+          
+          itemBg.x = 20;
+          itemBg.y = itemY;
+          card.addChild(itemBg);
+          
+          // Prize icon (diamond)
+          const iconBg = new PIXI.Graphics();
+          iconBg.beginFill(0xffffff);
+          iconBg.drawRoundedRect(0, 0, 48, 48, 8);
+          iconBg.endFill();
+          iconBg.x = 20;
+          iconBg.y = itemY + 6;
+          card.addChild(iconBg);
+          
+          const iconText = new PIXI.Text('💎', {
+            fontFamily: 'Arial',
+            fontSize: 24,
+            fill: 0x000000
+          });
+          iconText.anchor.set(0.5);
+          iconText.x = 20 + 24;
+          iconText.y = itemY + 30;
+          card.addChild(iconText);
+          
+          // Prize details
+          const date = new Date(reward.ts);
+          const dateTime = date.toLocaleDateString('en-US') + ', ' + date.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', hour12: true});
+          const dateText = new PIXI.Text(dateTime, {
+            fontFamily: 'Arial',
+            fontSize: 12,
+            fill: 0xffffff,
+            fontWeight: 'normal'
+          });
+          dateText.x = 80;
+          dateText.y = itemY + 10;
+          card.addChild(dateText);
+          
+          const prizeText = new PIXI.Text(reward.prize, {
+            fontFamily: 'Arial',
+            fontSize: 14,
+            fill: 0xffffff,
+            fontWeight: 'bold'
+          });
+          prizeText.x = 80;
+          prizeText.y = itemY + 30;
+          card.addChild(prizeText);
+        });
+      }
+    } else if (type === 'info') {
+      // Terms content
+      const contentText = new PIXI.Text(active.terms || 'No terms specified.', {
+        fontFamily: 'Arial',
+        fontSize: 14,
+        fill: 0xe8fff5,
+        wordWrap: true,
+        wordWrapWidth: cardWidth - 40
+      });
+      contentText.x = 20;
+      contentText.y = contentY;
+      card.addChild(contentText);
+    }
+  }
+  
+  function hideModal() {
+    modalLayer.removeChildren();
+    currentModal = null;
+  }
+
+  // Canvas-based SPIN button
+  let spinButton = null;
+  
+  function updateSpinButtonState() {
+    if (spinButton) {
+      if (spinning) {
+        spinButton.alpha = 0.5;
+        spinButton.interactive = false;
+      } else {
+        spinButton.alpha = 1;
+        spinButton.interactive = true;
+      }
+    }
+  }
+  
+  function drawSpinButton() {
+    // Remove existing spin button
+    if (spinButton) {
+      uiLayer.removeChild(spinButton);
+    }
+    
+    const vw = app.renderer.width;
+    const vh = app.renderer.height;
+    const dpr = window.devicePixelRatio || 1;
+    
+    // Button dimensions
+    const buttonWidth = 140 * dpr;
+    const buttonHeight = 50 * dpr;
+    const buttonX = (vw - buttonWidth) / 2;
+    const buttonY = vh - 100 * dpr; // Position at bottom center
+    
+    // Create button graphics
+    spinButton = new PIXI.Graphics();
+    
+    // Button background with gradient effect
+    spinButton.beginFill(0x24d58b);
+    spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+    spinButton.endFill();
+    
+    // Button border
+    spinButton.lineStyle(2 * dpr, 0x0fb168);
+    spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+    
+    // Button shadow effect
+    spinButton.beginFill(0x000000, 0.2);
+    spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+    spinButton.endFill();
+    
+    // Button text
+    const text = new PIXI.Text('SPIN', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: 20 * dpr,
+      fill: 0xffffff,
+      fontWeight: 'bold',
+      stroke: 0x000000,
+      strokeThickness: 1 * dpr
+    });
+    text.anchor.set(0.5);
+    text.x = buttonWidth / 2;
+    text.y = buttonHeight / 2;
+    spinButton.addChild(text);
+    
+    spinButton.x = buttonX;
+    spinButton.y = buttonY;
+    spinButton.interactive = true;
+    spinButton.buttonMode = true;
+    spinButton.cursor = 'pointer';
+    
+    // Hover effects
+    spinButton.on('pointerover', () => {
+      spinButton.clear();
+      spinButton.beginFill(0x2be68b);
+      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+      spinButton.endFill();
+      spinButton.lineStyle(2 * dpr, 0x0fb168);
+      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+      spinButton.beginFill(0x000000, 0.2);
+      spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+      spinButton.endFill();
+      spinButton.addChild(text);
+    });
+    
+    spinButton.on('pointerout', () => {
+      spinButton.clear();
+      spinButton.beginFill(0x24d58b);
+      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+      spinButton.endFill();
+      spinButton.lineStyle(2 * dpr, 0x0fb168);
+      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+      spinButton.beginFill(0x000000, 0.2);
+      spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+      spinButton.endFill();
+      spinButton.addChild(text);
+    });
+    
+    // Click handler - call the same spin function
+    spinButton.on('pointerdown', () => {
+      if (!spinning) {
+        spin();
+      }
+    });
+    
+    // Update button state based on spinning
+    if (spinning) {
+      spinButton.alpha = 0.5;
+      spinButton.interactive = false;
+    } else {
+      spinButton.alpha = 1;
+      spinButton.interactive = true;
+    }
+    
+    uiLayer.addChild(spinButton);
+  }
+
+  // Claim button functionality
 
   // Init ---------------------------------------------------------------------
   function refreshTemplateUI(){
@@ -767,6 +1473,17 @@
     configText.value = active.prizesText || '';
     termsText.value = active.terms || '';
     termsBody.textContent = active.terms || '';
+
+    // Claim button settings
+    if (active.settings) {
+      claimAction.value = active.settings.claimAction || 'modal';
+      claimUrl.value = active.settings.claimUrl || '';
+      claimUrlRow.style.display = claimAction.value === 'redirect' ? 'block' : 'none';
+    } else {
+      claimAction.value = 'modal';
+      claimUrl.value = '';
+      claimUrlRow.style.display = 'none';
+    }
 
     forceSelect.innerHTML = '<option value="">Force Prize (QA)</option>' + SLICES.map((s,i)=>`<option value="${i}">${s.label}</option>`).join('');
     updateSoundButton();
@@ -912,21 +1629,27 @@ function generateStandaloneHTML(templateData) {
 <script>
 (async function(){
   try{
-    const CONFIG = { API_ENDPOINT: '/api/claim', ENABLE_SFX: true, BASE_RADIUS: 360, HUB_RADIUS: 70 };
-    const app = new PIXI.Application({ resizeTo: document.getElementById('game'), backgroundAlpha: 0, antialias: true, autoDensity: true, powerPreference: 'high-performance' });
-    document.getElementById('game').appendChild(app.view);
-    const DESIGN = { w: 900, h: 1400 };
-    
-    const root = new PIXI.Container();
-    const bgLayer = new PIXI.Container();
-    const uiLayer = new PIXI.Container();
-    app.stage.addChild(bgLayer); app.stage.addChild(root); app.stage.addChild(uiLayer);
-    const wheelContainer = new PIXI.Container();
-    root.addChild(wheelContainer);
+    const CONFIG = { API_ENDPOINT: '/api/claim', ENABLE_SFX: true, BASE_RADIUS: 400, HUB_RADIUS: 80 };
+  const app = new PIXI.Application({ resizeTo: document.getElementById('game'), backgroundAlpha: 0, antialias: true, autoDensity: true, powerPreference: 'high-performance' });
+  document.getElementById('game').appendChild(app.view);
+  const DESIGN = { w: 900, h: 1400 };
+  
+  const root = new PIXI.Container();
+  const bgLayer = new PIXI.Container();
+  const uiLayer = new PIXI.Container();
+  const topbarLayer = new PIXI.Container();
+  const modalLayer = new PIXI.Container();
+  app.stage.addChild(bgLayer); 
+  app.stage.addChild(root); 
+  app.stage.addChild(uiLayer);
+  app.stage.addChild(topbarLayer);
+  app.stage.addChild(modalLayer);
+  const wheelContainer = new PIXI.Container();
+  root.addChild(wheelContainer);
     
     let sizeMultiplier = ${wheelSize}; let autoMultiplier = 1;
     function computeAutoMultiplier(){ const vw=app.renderer.width, vh=app.renderer.height; const minEdge=Math.min(vw,vh); const targetDiameter=minEdge*0.8; autoMultiplier = targetDiameter/(CONFIG.BASE_RADIUS*2); autoMultiplier=Math.max(0.6, Math.min(1.6, autoMultiplier)); }
-    function layout(){ const vw=app.renderer.width, vh=app.renderer.height; const scale=Math.min(vw/DESIGN.w, vh/DESIGN.h); root.scale.set(scale); root.x=vw/2-(DESIGN.w*scale)/2; root.y=vh/2-(DESIGN.h*scale)/2; wheelContainer.x=DESIGN.w/2; wheelContainer.y=(vw>vh)? DESIGN.h/2-20 : DESIGN.h/2-120; drawBackground(); computeAutoMultiplier(); drawWheel(); drawLogo(); }
+    function layout(){ const vw=app.renderer.width, vh=app.renderer.height; const scale=Math.min(vw/DESIGN.w, vh/DESIGN.h); root.scale.set(scale); root.x=vw/2-(DESIGN.w*scale)/2; root.y=vh/2-(DESIGN.h*scale)/2; wheelContainer.x=DESIGN.w/2; wheelContainer.y=(vw>vh)? DESIGN.h/2-20 : DESIGN.h/2-120; drawBackground(); computeAutoMultiplier(); drawWheel(); drawLogo(); drawTopbar(); drawSpinButton(); }
     app.renderer.on('resize', layout);
     
     const SLICES = ${JSON.stringify(slices)};
@@ -1016,7 +1739,12 @@ function generateStandaloneHTML(templateData) {
     const audioCtx=(window.AudioContext? new AudioContext(): null);
     let muted = false;
     function isSoundOn(){ return !muted; }
-    function updateSoundButton(){ document.getElementById('btnSound').textContent = (isSoundOn()? '🔊 Sound' : '🔇 Sound'); }
+    function updateSoundButton(){ 
+      // Update canvas sound button text
+      if (soundButton && soundButton.children[0]) {
+        soundButton.children[0].text = (isSoundOn()? '🔊 Sound' : '🔇 Sound');
+      }
+    }
     function playTone(f=880,t=0.15,type='triangle',v=0.08){
       if(!audioCtx || !isSoundOn()) return;
       const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
@@ -1064,7 +1792,23 @@ function generateStandaloneHTML(templateData) {
     
     const spinBtn=document.getElementById('spinBtn');
     spinBtn.addEventListener('click', spin);
-    app.view.addEventListener('pointerdown', (e)=>{ if(e.pointerType!=='mouse') spin(); });
+    // Only allow touch spin on the wheel area, not the entire canvas
+    app.view.addEventListener('pointerdown', (e)=>{ 
+      if(e.pointerType!=='mouse') {
+        // Check if click is within wheel area (approximate center area)
+        const rect = app.view.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+        
+        // Only spin if click is within wheel radius (approximate 320px radius for 1.6x scale)
+        if(distance < 320) {
+          spin();
+        }
+      }
+    });
     document.getElementById('btnInfo').addEventListener('click', ()=> document.getElementById('infoModal').classList.add('show'));
     document.getElementById('btnSound').addEventListener('click', ()=>{ muted = !muted; updateSoundButton(); });
     document.querySelectorAll('.modal-close').forEach(btn=> btn.addEventListener('click', (e)=> document.querySelector(e.target.getAttribute('data-close')).classList.remove('show')));
@@ -1082,16 +1826,589 @@ function generateStandaloneHTML(templateData) {
       rotStart = wheel.rotation % TWO_PI;
       rotEnd   = targetCenter + fullSpins;
       duration = 4.25 + Math.random()*0.9;
-      t = 0; spinning = true; spinBtn.disabled = true;
-      showToast('Spinning for your gift...'); sfxSpin();
+      t = 0; spinning = true;
+      sfxSpin();
       spin._result = chosen;
     }
     async function onSpinComplete(){
       spinBtn.disabled=false;
       const res=spin._result;
-      showToast('🎊 You won: '+res.label); sfxWin(); spawnConfetti(140);
+      sfxWin(); spawnConfetti(140);
+      
+      // Show congratulations modal for prize announcement
+      showCanvasCongratsModal(res);
     }
     function showToast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.style.display='block'; clearTimeout(showToast._t); showToast._t=setTimeout(()=> el.style.display='none', 2200); }
+    
+    // Canvas-based topbar and modals
+    let topbarButtons = [];
+    let currentModal = null;
+    let soundButton = null; // Store reference to sound button for updates
+    
+    function drawTopbar() {
+      topbarLayer.removeChildren();
+      topbarButtons = [];
+      
+      const vw = app.renderer.width;
+      const vh = app.renderer.height;
+      const buttonWidth = 80;
+      const buttonHeight = 35;
+      const gap = 10;
+      const rightMargin = 16;
+      const topMargin = 16;
+      
+      // Create buttons
+      const buttons = [
+        { id: 'btnRewards', text: '🏆 Rewards', action: 'rewards' },
+        { id: 'btnInfo', text: 'ℹ️ Info', action: 'info' },
+        { id: 'btnSound', text: '🔊 Sound', action: 'sound' }
+      ];
+      
+      buttons.forEach((btn, index) => {
+        const button = new PIXI.Graphics();
+        const x = vw - rightMargin - (buttonWidth + gap) * (buttons.length - index);
+        const y = topMargin;
+        
+        // Button background
+        button.beginFill(0x17342c);
+        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+        button.endFill();
+        
+        // Button border
+        button.lineStyle(1, 0x23493d);
+        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+        
+        // Button text
+        const text = new PIXI.Text(btn.text, {
+          fontFamily: 'Arial',
+          fontSize: 12,
+          fill: 0xd9fff2,
+          fontWeight: 'bold'
+        });
+        text.anchor.set(0.5);
+        text.x = buttonWidth / 2;
+        text.y = buttonHeight / 2;
+        button.addChild(text);
+        
+        button.x = x;
+        button.y = y;
+        button.interactive = true;
+        button.buttonMode = true;
+        
+        // Hover effects
+        button.on('pointerover', () => {
+          button.clear();
+          button.beginFill(0x1b3e33);
+          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          button.endFill();
+          button.lineStyle(1, 0x23493d);
+          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          button.addChild(text);
+        });
+        
+        button.on('pointerout', () => {
+          button.clear();
+          button.beginFill(0x17342c);
+          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          button.endFill();
+          button.lineStyle(1, 0x23493d);
+          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          button.addChild(text);
+        });
+        
+        // Click handler
+        button.on('pointerdown', () => {
+          if (btn.action === 'rewards') {
+            showModal('rewards');
+          } else if (btn.action === 'info') {
+            showModal('info');
+          } else if (btn.action === 'sound') {
+            // Toggle sound
+            muted = !muted;
+            updateSoundButton();
+          }
+        });
+        
+        topbarLayer.addChild(button);
+        topbarButtons.push(button);
+        
+        // Store reference to sound button for updates
+        if (btn.action === 'sound') {
+          soundButton = button;
+        }
+      });
+    }
+    
+    function showModal(type) {
+      modalLayer.removeChildren();
+      currentModal = type;
+      
+      const vw = app.renderer.width;
+      const vh = app.renderer.height;
+      
+      // Modal background
+      const modalBg = new PIXI.Graphics();
+      modalBg.beginFill(0x000000, 0.55);
+      modalBg.drawRect(0, 0, vw, vh);
+      modalBg.endFill();
+      modalBg.interactive = true;
+      modalBg.on('pointerdown', () => hideModal());
+      modalLayer.addChild(modalBg);
+      
+      // Modal card
+      const cardWidth = Math.min(vw * 0.9, 720);
+      const cardHeight = Math.min(vh * 0.8, 600);
+      const cardX = (vw - cardWidth) / 2;
+      const cardY = (vh - cardHeight) / 2;
+      
+      const card = new PIXI.Graphics();
+      card.beginFill(0x0e1f1a);
+      card.lineStyle(1, 0x204a3e);
+      card.drawRoundedRect(0, 0, cardWidth, cardHeight, 14);
+      card.endFill();
+      card.x = cardX;
+      card.y = cardY;
+      modalLayer.addChild(card);
+      
+      // Modal header
+      const headerHeight = 50;
+      const header = new PIXI.Graphics();
+      header.beginFill(0x0e1f1a);
+      header.lineStyle(1, 0x204a3e, 0, 0);
+      header.drawRect(0, 0, cardWidth, headerHeight);
+      header.endFill();
+      header.lineStyle(1, 0x204a3e);
+      header.moveTo(0, headerHeight);
+      header.lineTo(cardWidth, headerHeight);
+      card.addChild(header);
+      
+      // Header text
+      const titleText = new PIXI.Text(
+        type === 'rewards' ? 'REWARDS HISTORY' : 'TERMS & CONDITIONS',
+        {
+          fontFamily: 'Arial',
+          fontSize: 14,
+          fill: 0xa3ffe0,
+          fontWeight: 'bold'
+        }
+      );
+      titleText.x = 20;
+      titleText.y = 15;
+      card.addChild(titleText);
+      
+      // Close button
+      const closeBtn = new PIXI.Graphics();
+      closeBtn.beginFill(0x17342c);
+      closeBtn.drawRoundedRect(0, 0, 30, 25, 8);
+      closeBtn.endFill();
+      closeBtn.x = cardWidth - 40;
+      closeBtn.y = 12;
+      closeBtn.interactive = true;
+      closeBtn.buttonMode = true;
+      closeBtn.on('pointerdown', () => hideModal());
+      
+      const closeText = new PIXI.Text('×', {
+        fontFamily: 'Arial',
+        fontSize: 16,
+        fill: 0xc9ffe9,
+        fontWeight: 'bold'
+      });
+      closeText.anchor.set(0.5);
+      closeText.x = 15;
+      closeText.y = 12;
+      closeBtn.addChild(closeText);
+      card.addChild(closeBtn);
+      
+      // Modal content
+      const contentY = headerHeight + 20;
+      const contentHeight = cardHeight - headerHeight - 40;
+      
+      if (type === 'rewards') {
+        // Get rewards history from actual data
+        const rewardsHistory = loadHistory().slice().reverse();
+        if (rewardsHistory.length === 0) {
+          // Empty state
+          const emptyText = new PIXI.Text('No prizes won yet. Spin the wheel to win prizes!', {
+            fontFamily: 'Arial',
+            fontSize: 16,
+            fill: 0xe8fff5,
+            wordWrap: true,
+            wordWrapWidth: cardWidth - 40
+          });
+          emptyText.x = 20;
+          emptyText.y = contentY;
+          card.addChild(emptyText);
+        } else {
+          // Create grid layout for rewards
+          const itemHeight = 60;
+          const itemWidth = cardWidth - 40;
+          const startY = contentY;
+          
+          rewardsHistory.slice(0, 6).forEach((reward, index) => {
+            const itemY = startY + (index * (itemHeight + 12));
+            
+            // Create reward item background with gradient effect
+            const itemBg = new PIXI.Graphics();
+            itemBg.beginFill(0x8B5CF6); // Purple gradient start
+            itemBg.drawRoundedRect(0, 0, itemWidth, itemHeight, 12);
+            itemBg.endFill();
+            
+            // Add gradient effect (simulated)
+            const gradientOverlay = new PIXI.Graphics();
+            gradientOverlay.beginFill(0xEC4899, 0.3); // Pink gradient end
+            gradientOverlay.drawRoundedRect(0, 0, itemWidth, itemHeight, 12);
+            gradientOverlay.endFill();
+            itemBg.addChild(gradientOverlay);
+            
+            itemBg.x = 20;
+            itemBg.y = itemY;
+            card.addChild(itemBg);
+            
+            // Prize icon (diamond)
+            const iconBg = new PIXI.Graphics();
+            iconBg.beginFill(0xffffff);
+            iconBg.drawRoundedRect(0, 0, 48, 48, 8);
+            iconBg.endFill();
+            iconBg.x = 20;
+            iconBg.y = itemY + 6;
+            card.addChild(iconBg);
+            
+            const iconText = new PIXI.Text('💎', {
+              fontFamily: 'Arial',
+              fontSize: 24,
+              fill: 0x000000
+            });
+            iconText.anchor.set(0.5);
+            iconText.x = 20 + 24;
+            iconText.y = itemY + 30;
+            card.addChild(iconText);
+            
+            // Prize details
+            const date = new Date(reward.ts);
+            const dateTime = date.toLocaleDateString('en-US') + ', ' + date.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', hour12: true});
+            const dateText = new PIXI.Text(dateTime, {
+              fontFamily: 'Arial',
+              fontSize: 12,
+              fill: 0xffffff,
+              fontWeight: 'normal'
+            });
+            dateText.x = 80;
+            dateText.y = itemY + 10;
+            card.addChild(dateText);
+            
+            const prizeText = new PIXI.Text(reward.prize, {
+              fontFamily: 'Arial',
+              fontSize: 14,
+              fill: 0xffffff,
+              fontWeight: 'bold'
+            });
+            prizeText.x = 80;
+            prizeText.y = itemY + 30;
+            card.addChild(prizeText);
+          });
+        }
+      } else if (type === 'info') {
+        // Terms content
+        const contentText = new PIXI.Text('${terms || 'No terms specified.'}', {
+          fontFamily: 'Arial',
+          fontSize: 14,
+          fill: 0xe8fff5,
+          wordWrap: true,
+          wordWrapWidth: cardWidth - 40
+        });
+        contentText.x = 20;
+        contentText.y = contentY;
+        card.addChild(contentText);
+      }
+    }
+    
+    function hideModal() {
+      modalLayer.removeChildren();
+      currentModal = null;
+    }
+    
+    // Canvas congratulations modal
+    function showCanvasCongratsModal(prize) {
+      // Clear any existing congratulations modal
+      modalLayer.removeChildren();
+      
+      // Create congratulations modal background
+      const modalBg = new PIXI.Graphics();
+      modalBg.beginFill(0x000000, 0.8);
+      modalBg.drawRect(0, 0, app.screen.width, app.screen.height);
+      modalBg.endFill();
+      modalBg.interactive = true;
+      modalBg.cursor = 'pointer';
+      modalBg.on('pointerdown', () => hideCanvasCongratsModal());
+      modalLayer.addChild(modalBg);
+      
+      // Create congratulations card
+      const cardWidth = 400;
+      const cardHeight = 300;
+      const cardX = (app.screen.width - cardWidth) / 2;
+      const cardY = (app.screen.height - cardHeight) / 2;
+      
+      const card = new PIXI.Graphics();
+      card.beginFill(0x1a1a1a);
+      card.drawRoundedRect(0, 0, cardWidth, cardHeight, 20);
+      card.endFill();
+      
+      // Add gradient border effect
+      const border = new PIXI.Graphics();
+      border.lineStyle(3, 0x8B5CF6);
+      border.drawRoundedRect(0, 0, cardWidth, cardHeight, 20);
+      card.addChild(border);
+      
+      card.x = cardX;
+      card.y = cardY;
+      modalLayer.addChild(card);
+      
+      // Add ribbon decoration
+      const ribbon = new PIXI.Text('🎀', {
+        fontFamily: 'Arial',
+        fontSize: 32,
+        fill: 0xEC4899
+      });
+      ribbon.anchor.set(0.5);
+      ribbon.x = cardWidth / 2;
+      ribbon.y = 30;
+      card.addChild(ribbon);
+      
+      // Close button
+      const closeBtn = new PIXI.Graphics();
+      closeBtn.beginFill(0x333333);
+      closeBtn.drawCircle(0, 0, 20);
+      closeBtn.endFill();
+      closeBtn.x = cardWidth - 30;
+      closeBtn.y = 30;
+      closeBtn.interactive = true;
+      closeBtn.cursor = 'pointer';
+      closeBtn.on('pointerdown', () => hideCanvasCongratsModal());
+      card.addChild(closeBtn);
+      
+      const closeText = new PIXI.Text('×', {
+        fontFamily: 'Arial',
+        fontSize: 20,
+        fill: 0xffffff,
+        fontWeight: 'bold'
+      });
+      closeText.anchor.set(0.5);
+      closeText.x = cardWidth - 30;
+      closeText.y = 30;
+      card.addChild(closeText);
+      
+      // Congratulations title
+      const title = new PIXI.Text('CONGRATULATIONS!', {
+        fontFamily: 'Arial',
+        fontSize: 24,
+        fill: 0x8B5CF6,
+        fontWeight: 'bold'
+      });
+      title.anchor.set(0.5);
+      title.x = cardWidth / 2;
+      title.y = 80;
+      card.addChild(title);
+      
+      // Subtitle
+      const subtitle = new PIXI.Text('You receive', {
+        fontFamily: 'Arial',
+        fontSize: 16,
+        fill: 0xffffff
+      });
+      subtitle.anchor.set(0.5);
+      subtitle.x = cardWidth / 2;
+      subtitle.y = 120;
+      card.addChild(subtitle);
+      
+      // Prize display
+      const prizeText = new PIXI.Text(prize.label, {
+        fontFamily: 'Arial',
+        fontSize: 28,
+        fill: 0xEC4899,
+        fontWeight: 'bold'
+      });
+      prizeText.anchor.set(0.5);
+      prizeText.x = cardWidth / 2;
+      prizeText.y = 160;
+      card.addChild(prizeText);
+      
+      // Generate diamonds based on prize
+      const diamondCount = Math.min(5, Math.max(1, Math.floor(Math.random() * 3) + 1));
+      const diamonds = new PIXI.Text('💎'.repeat(diamondCount), {
+        fontFamily: 'Arial',
+        fontSize: 24
+      });
+      diamonds.anchor.set(0.5);
+      diamonds.x = cardWidth / 2;
+      diamonds.y = 190;
+      card.addChild(diamonds);
+      
+      // Claim button - make it larger and more prominent
+      const claimBtn = new PIXI.Graphics();
+      claimBtn.beginFill(0xEC4899);
+      claimBtn.drawRoundedRect(0, 0, 150, 50, 10);
+      claimBtn.endFill();
+      claimBtn.x = (cardWidth - 150) / 2;
+      claimBtn.y = 220;
+      claimBtn.interactive = true;
+      claimBtn.cursor = 'pointer';
+      claimBtn.buttonMode = true;
+      
+      // Try multiple event types
+      claimBtn.on('pointerdown', (event) => {
+        event.stopPropagation();
+        
+        // Default: directly call the rewards modal function
+        showModal('rewards');
+        hideCanvasCongratsModal();
+      });
+      
+      claimBtn.on('click', (event) => {
+        event.stopPropagation();
+        
+        // Default: directly call the rewards modal function
+        showModal('rewards');
+        hideCanvasCongratsModal();
+      });
+      
+      claimBtn.on('tap', (event) => {
+        event.stopPropagation();
+        
+        // Default: directly call the rewards modal function
+        showModal('rewards');
+        hideCanvasCongratsModal();
+      });
+      
+      // Add hover effects for debugging
+      claimBtn.on('pointerover', () => {
+        console.log('Claim button hovered');
+        claimBtn.alpha = 0.8;
+      });
+      
+      claimBtn.on('pointerout', () => {
+        console.log('Claim button unhovered');
+        claimBtn.alpha = 1.0;
+      });
+      
+      const claimText = new PIXI.Text('CLAIM', {
+        fontFamily: 'Arial',
+        fontSize: 18,
+        fill: 0xffffff,
+        fontWeight: 'bold'
+      });
+      claimText.anchor.set(0.5);
+      claimText.x = 75; // Center within larger button
+      claimText.y = 25; // Center within larger button
+      claimBtn.addChild(claimText);
+      
+      card.addChild(claimBtn);
+    }
+    
+    function hideCanvasCongratsModal() {
+      modalLayer.removeChildren();
+    }
+
+    // Canvas-based SPIN button
+    let spinButton = null;
+    
+    function drawSpinButton() {
+      // Remove existing spin button
+      if (spinButton) {
+        uiLayer.removeChild(spinButton);
+      }
+      
+      const vw = app.renderer.width;
+      const vh = app.renderer.height;
+      const dpr = window.devicePixelRatio || 1;
+      
+      // Button dimensions
+      const buttonWidth = 140 * dpr;
+      const buttonHeight = 50 * dpr;
+      const buttonX = (vw - buttonWidth) / 2;
+      const buttonY = vh - 100 * dpr; // Position at bottom center
+      
+      // Create button graphics
+      spinButton = new PIXI.Graphics();
+      
+      // Button background with gradient effect
+      spinButton.beginFill(0x24d58b);
+      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+      spinButton.endFill();
+      
+      // Button border
+      spinButton.lineStyle(2 * dpr, 0x0fb168);
+      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+      
+      // Button shadow effect
+      spinButton.beginFill(0x000000, 0.2);
+      spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+      spinButton.endFill();
+      
+      // Button text
+      const text = new PIXI.Text('SPIN', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: 20 * dpr,
+        fill: 0xffffff,
+        fontWeight: 'bold',
+        stroke: 0x000000,
+        strokeThickness: 1 * dpr
+      });
+      text.anchor.set(0.5);
+      text.x = buttonWidth / 2;
+      text.y = buttonHeight / 2;
+      spinButton.addChild(text);
+      
+      spinButton.x = buttonX;
+      spinButton.y = buttonY;
+      spinButton.interactive = true;
+      spinButton.buttonMode = true;
+      spinButton.cursor = 'pointer';
+      
+      // Hover effects
+      spinButton.on('pointerover', () => {
+        spinButton.clear();
+        spinButton.beginFill(0x2be68b);
+        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.endFill();
+        spinButton.lineStyle(2 * dpr, 0x0fb168);
+        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.beginFill(0x000000, 0.2);
+        spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.endFill();
+        spinButton.addChild(text);
+      });
+      
+      spinButton.on('pointerout', () => {
+        spinButton.clear();
+        spinButton.beginFill(0x24d58b);
+        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.endFill();
+        spinButton.lineStyle(2 * dpr, 0x0fb168);
+        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.beginFill(0x000000, 0.2);
+        spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.endFill();
+        spinButton.addChild(text);
+      });
+      
+      // Click handler - call the same spin function
+      spinButton.on('pointerdown', () => {
+        if (!spinning) {
+          spin();
+        }
+      });
+      
+      // Update button state based on spinning
+      if (spinning) {
+        spinButton.alpha = 0.5;
+        spinButton.interactive = false;
+      } else {
+        spinButton.alpha = 1;
+        spinButton.interactive = true;
+      }
+      
+      uiLayer.addChild(spinButton);
+    }
     
     updateSoundButton();
     layout();
