@@ -192,6 +192,17 @@
         <input type="url" id="claimUrl" placeholder="https://example.com/claim">
       </div>
       
+      <h3>Prize Control</h3>
+      <div class="element-section">
+        <div class="row">
+          <label>Guaranteed Prize</label>
+          <select id="guaranteedPrize">
+            <option value="">Random Prize (Normal)</option>
+          </select>
+        </div>
+        <div class="subtle">🎯 Set a specific prize that the player will always win. Useful for testing or special events!</div>
+      </div>
+      
       <h3>Wheel Image</h3>
       <div class="element-section">
         <div class="row">
@@ -200,6 +211,108 @@
           <button id="wheelClear" class="btn-sm btn-ghost">Clear</button>
         </div>
         <div class="subtle">💡 Upload a wheel image to use as background. Prize weights will still work correctly!</div>
+      </div>
+
+      <h3>Canvas UI Elements</h3>
+      <div class="element-section">
+        <div class="sublabel">Topbar Buttons</div>
+        <div class="row">
+          <label>Rewards Button</label>
+          <input id="canvasRewardsBtnFile" type="file" accept="image/*">
+          <button id="canvasRewardsBtnClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="row">
+          <label>Info Button</label>
+          <input id="canvasInfoBtnFile" type="file" accept="image/*">
+          <button id="canvasInfoBtnClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="row">
+          <label>Sound Button (Unmute)</label>
+          <input id="canvasSoundUnmuteFile" type="file" accept="image/*">
+          <button id="canvasSoundUnmuteClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="row">
+          <label>Sound Button (Mute)</label>
+          <input id="canvasSoundMuteFile" type="file" accept="image/*">
+          <button id="canvasSoundMuteClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+      </div>
+
+      <div class="element-section">
+        <div class="sublabel">Spin Button</div>
+        <div class="row">
+          <label>Spin Button Image</label>
+          <input id="canvasSpinBtnFile" type="file" accept="image/*">
+          <button id="canvasSpinBtnClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+      </div>
+
+      <div class="element-section">
+        <div class="sublabel">Modal Backgrounds</div>
+        <div class="row">
+          <label>Rewards Modal</label>
+          <input id="canvasRewardsModalFile" type="file" accept="image/*">
+          <button id="canvasRewardsModalClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="row">
+          <label>Info Modal</label>
+          <input id="canvasInfoModalFile" type="file" accept="image/*">
+          <button id="canvasInfoModalClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="row">
+          <label>Congratulations Modal</label>
+          <input id="canvasCongratsModalFile" type="file" accept="image/*">
+          <button id="canvasCongratsModalClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+      </div>
+
+      <h3>Canvas Colors & Styling</h3>
+      <div class="element-section">
+        <div class="sublabel">Button Colors</div>
+        <div class="row">
+          <label>Primary Button Color</label>
+          <input id="canvasBtnPrimaryColor" type="color" value="#17342c">
+        </div>
+        <div class="row">
+          <label>Button Hover Color</label>
+          <input id="canvasBtnHoverColor" type="color" value="#1b3e33">
+        </div>
+        <div class="row">
+          <label>Button Text Color</label>
+          <input id="canvasBtnTextColor" type="color" value="#d9fff2">
+        </div>
+      </div>
+
+      <div class="element-section">
+        <div class="sublabel">Modal Colors</div>
+        <div class="row">
+          <label>Modal Background</label>
+          <input id="canvasModalBgColor" type="color" value="#0e1f1a">
+        </div>
+        <div class="row">
+          <label>Modal Border</label>
+          <input id="canvasModalBorderColor" type="color" value="#204a3e">
+        </div>
+        <div class="row">
+          <label>Modal Text Color</label>
+          <input id="canvasModalTextColor" type="color" value="#e8fff5">
+        </div>
+      </div>
+
+      <div class="element-section">
+        <div class="sublabel">Spin Button Colors</div>
+        <div class="row">
+          <label>Spin Button Color</label>
+          <input id="canvasSpinBtnColor" type="color" value="#24d58b">
+        </div>
+        <div class="row">
+          <label>Spin Button Hover</label>
+          <input id="canvasSpinBtnHoverColor" type="color" value="#2be68b">
+        </div>
+        <div class="row">
+          <label>Spin Button Border</label>
+          <input id="canvasSpinBtnBorderColor" type="color" value="#0fb168">
+        </div>
       </div>
 
       <!-- PRIZES moved above Terms & Conditions -->

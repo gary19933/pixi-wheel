@@ -34,7 +34,7 @@
   function defaultTemplate(){ return { name:'Default', terms:`By participating you agree:
 • One spin per session.
 • Prizes are non-transferable.
-• Organizer reserves the right to modify terms.`, prizesText:'🎁 iPhone 15 Pro | 1 | #25c77a\n💰 RM 50 Credit | 2 | #E9FFF7\n🎉 Mystery Gift | 1 | #25c77a\n🧧 Angpao RM 10 | 2 | #E9FFF7\n🍀 Free Spin | 3 | #25c77a\n💎 Mega Gift Box | 0.5 | #E9FFF7', assets:{bg:null,logo:null,spin:null,rewardsBtn:null,infoBtn:null,soundUnmute:null,soundMute:null,rewardsModal:null,rewardsClose:null,infoModal:null,infoClose:null,wheel:null}, colors:{pageBackground:{type:'color',style:'#0a2b22'},spinButton:{type:'gradient',style:'linear-gradient(to bottom, #24d58b, #0fb168)'}}, settings:{claimAction:'modal',claimUrl:''} }; }
+• Organizer reserves the right to modify terms.`, prizesText:'🎁 iPhone 15 Pro | 1 | #25c77a\n💰 RM 50 Credit | 2 | #E9FFF7\n🎉 Mystery Gift | 1 | #25c77a\n🧧 Angpao RM 10 | 2 | #E9FFF7\n🍀 Free Spin | 3 | #25c77a\n💎 Mega Gift Box | 0.5 | #E9FFF7', assets:{bg:null,logo:null,spin:null,rewardsBtn:null,infoBtn:null,soundUnmute:null,soundMute:null,rewardsModal:null,rewardsClose:null,infoModal:null,infoClose:null,wheel:null,canvasRewardsBtn:null,canvasInfoBtn:null,canvasSoundUnmute:null,canvasSoundMute:null,canvasSpinBtn:null,canvasRewardsModal:null,canvasInfoModal:null,canvasCongratsModal:null}, colors:{pageBackground:{type:'color',style:'#0a2b22'},spinButton:{type:'gradient',style:'linear-gradient(to bottom, #24d58b, #0fb168)'},canvasBtnPrimary:'#17342c',canvasBtnHover:'#1b3e33',canvasBtnText:'#d9fff2',canvasModalBg:'#0e1f1a',canvasModalBorder:'#204a3e',canvasModalText:'#e8fff5',canvasSpinBtn:'#24d58b',canvasSpinBtnHover:'#2be68b',canvasSpinBtnBorder:'#0fb168'}, settings:{claimAction:'modal',claimUrl:'',guaranteedPrize:''} }; }
   function loadTemplates(){ try{ const arr=JSON.parse(localStorage.getItem(LS_KEY)||'[]'); if(Array.isArray(arr)&&arr.length) return arr; }catch{} const seed=[defaultTemplate()]; localStorage.setItem(LS_KEY, JSON.stringify(seed)); return seed; }
   function saveTemplates(){ localStorage.setItem(LS_KEY, JSON.stringify(templates)); }
   let templates = loadTemplates(); let activeIndex=0; let active=templates[activeIndex];
@@ -271,6 +271,90 @@
   wheelFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.wheel=await fileToDataURL(f); saveTemplates(); drawWheel(true); showToast('🖼️ Wheel image set - Prize weights still work!'); });
   wheelClear.addEventListener('click', ()=>{ active.assets.wheel=null; saveTemplates(); drawWheel(true); });
 
+  // Canvas UI Image handlers
+  const canvasRewardsBtnFile = document.getElementById('canvasRewardsBtnFile');
+  const canvasRewardsBtnClear = document.getElementById('canvasRewardsBtnClear');
+  const canvasInfoBtnFile = document.getElementById('canvasInfoBtnFile');
+  const canvasInfoBtnClear = document.getElementById('canvasInfoBtnClear');
+  const canvasSoundUnmuteFile = document.getElementById('canvasSoundUnmuteFile');
+  const canvasSoundUnmuteClear = document.getElementById('canvasSoundUnmuteClear');
+  const canvasSoundMuteFile = document.getElementById('canvasSoundMuteFile');
+  const canvasSoundMuteClear = document.getElementById('canvasSoundMuteClear');
+  const canvasSpinBtnFile = document.getElementById('canvasSpinBtnFile');
+  const canvasSpinBtnClear = document.getElementById('canvasSpinBtnClear');
+  const canvasRewardsModalFile = document.getElementById('canvasRewardsModalFile');
+  const canvasRewardsModalClear = document.getElementById('canvasRewardsModalClear');
+  const canvasInfoModalFile = document.getElementById('canvasInfoModalFile');
+  const canvasInfoModalClear = document.getElementById('canvasInfoModalClear');
+  const canvasCongratsModalFile = document.getElementById('canvasCongratsModalFile');
+  const canvasCongratsModalClear = document.getElementById('canvasCongratsModalClear');
+
+  // Canvas color controls
+  const canvasBtnPrimaryColor = document.getElementById('canvasBtnPrimaryColor');
+  const canvasBtnHoverColor = document.getElementById('canvasBtnHoverColor');
+  const canvasBtnTextColor = document.getElementById('canvasBtnTextColor');
+  const canvasModalBgColor = document.getElementById('canvasModalBgColor');
+  const canvasModalBorderColor = document.getElementById('canvasModalBorderColor');
+  const canvasModalTextColor = document.getElementById('canvasModalTextColor');
+  const canvasSpinBtnColor = document.getElementById('canvasSpinBtnColor');
+  const canvasSpinBtnHoverColor = document.getElementById('canvasSpinBtnHoverColor');
+  const canvasSpinBtnBorderColor = document.getElementById('canvasSpinBtnBorderColor');
+
+  // Prize control
+  const guaranteedPrize = document.getElementById('guaranteedPrize');
+
+  // Canvas UI Image event handlers
+  canvasRewardsBtnFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasRewardsBtn=await fileToDataURL(f); saveTemplates(); drawTopbar(); showToast('🖼️ Canvas Rewards button image set'); });
+  canvasRewardsBtnClear.addEventListener('click', ()=>{ active.assets.canvasRewardsBtn=null; saveTemplates(); drawTopbar(); });
+  
+  canvasInfoBtnFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasInfoBtn=await fileToDataURL(f); saveTemplates(); drawTopbar(); showToast('🖼️ Canvas Info button image set'); });
+  canvasInfoBtnClear.addEventListener('click', ()=>{ active.assets.canvasInfoBtn=null; saveTemplates(); drawTopbar(); });
+  
+  canvasSoundUnmuteFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasSoundUnmute=await fileToDataURL(f); saveTemplates(); drawTopbar(); showToast('🖼️ Canvas Sound unmute button image set'); });
+  canvasSoundUnmuteClear.addEventListener('click', ()=>{ active.assets.canvasSoundUnmute=null; saveTemplates(); drawTopbar(); });
+  
+  canvasSoundMuteFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasSoundMute=await fileToDataURL(f); saveTemplates(); drawTopbar(); showToast('🖼️ Canvas Sound mute button image set'); });
+  canvasSoundMuteClear.addEventListener('click', ()=>{ active.assets.canvasSoundMute=null; saveTemplates(); drawTopbar(); });
+  
+  canvasSpinBtnFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasSpinBtn=await fileToDataURL(f); saveTemplates(); drawSpinButton(); showToast('🖼️ Canvas Spin button image set'); });
+  canvasSpinBtnClear.addEventListener('click', ()=>{ active.assets.canvasSpinBtn=null; saveTemplates(); drawSpinButton(); });
+  
+  canvasRewardsModalFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasRewardsModal=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Canvas Rewards modal background set'); });
+  canvasRewardsModalClear.addEventListener('click', ()=>{ active.assets.canvasRewardsModal=null; saveTemplates(); });
+  
+  canvasInfoModalFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasInfoModal=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Canvas Info modal background set'); });
+  canvasInfoModalClear.addEventListener('click', ()=>{ active.assets.canvasInfoModal=null; saveTemplates(); });
+  
+  canvasCongratsModalFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasCongratsModal=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Canvas Congratulations modal background set'); });
+  canvasCongratsModalClear.addEventListener('click', ()=>{ active.assets.canvasCongratsModal=null; saveTemplates(); });
+
+  // Canvas color event handlers
+  canvasBtnPrimaryColor.addEventListener('change', ()=>{ active.colors.canvasBtnPrimary=canvasBtnPrimaryColor.value; saveTemplates(); drawTopbar(); });
+  canvasBtnHoverColor.addEventListener('change', ()=>{ active.colors.canvasBtnHover=canvasBtnHoverColor.value; saveTemplates(); drawTopbar(); });
+  canvasBtnTextColor.addEventListener('change', ()=>{ active.colors.canvasBtnText=canvasBtnTextColor.value; saveTemplates(); drawTopbar(); });
+  canvasModalBgColor.addEventListener('change', ()=>{ active.colors.canvasModalBg=canvasModalBgColor.value; saveTemplates(); });
+  canvasModalBorderColor.addEventListener('change', ()=>{ active.colors.canvasModalBorder=canvasModalBorderColor.value; saveTemplates(); });
+  canvasModalTextColor.addEventListener('change', ()=>{ active.colors.canvasModalText=canvasModalTextColor.value; saveTemplates(); });
+  canvasSpinBtnColor.addEventListener('change', ()=>{ active.colors.canvasSpinBtn=canvasSpinBtnColor.value; saveTemplates(); drawSpinButton(); });
+  canvasSpinBtnHoverColor.addEventListener('change', ()=>{ active.colors.canvasSpinBtnHover=canvasSpinBtnHoverColor.value; saveTemplates(); drawSpinButton(); });
+  canvasSpinBtnBorderColor.addEventListener('change', ()=>{ active.colors.canvasSpinBtnBorder=canvasSpinBtnBorderColor.value; saveTemplates(); drawSpinButton(); });
+
+  // Guaranteed prize event handler
+  guaranteedPrize.addEventListener('change', ()=>{ 
+    // Ensure settings object exists
+    if (!active.settings) {
+      active.settings = {};
+    }
+    active.settings.guaranteedPrize = guaranteedPrize.value; 
+    saveTemplates(); 
+    if (guaranteedPrize.value) {
+      const prizeLabel = SLICES.find(s => s.id === guaranteedPrize.value)?.label;
+      showToast('🎯 Guaranteed prize set: ' + prizeLabel);
+    } else {
+      showToast('🎲 Random prizes enabled');
+    }
+  });
+
   // Modal Background handlers
   rewardsModalFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.rewardsModal=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Rewards modal background set'); });
   rewardsModalClear.addEventListener('click', ()=>{ active.assets.rewardsModal=null; saveTemplates(); });
@@ -341,8 +425,9 @@
       active.name = defaultTpl.name;
       active.terms = defaultTpl.terms;
       active.prizesText = defaultTpl.prizesText;
-      active.assets = {bg:null,logo:null,wheel:null,spin:null};
+      active.assets = defaultTpl.assets;
       active.colors = defaultTpl.colors;
+      active.settings = defaultTpl.settings;
       
       // Reset UI elements
       templateName.value = active.name;
@@ -352,11 +437,33 @@
       // Reset color pickers
       bgType.value = 'color';
       bgColor.value = '#0a2b22';
-      btnType.value = 'gradient';
-      btnColor.value = '#24d58b';
-      btnGradient1.value = '#24d58b';
-      btnGradient2.value = '#0fb168';
-      btnGradientDirection.value = 'to bottom';
+      
+      // Reset canvas color pickers
+      canvasBtnPrimaryColor.value = '#17342c';
+      canvasBtnHoverColor.value = '#1b3e33';
+      canvasBtnTextColor.value = '#d9fff2';
+      canvasModalBgColor.value = '#0e1f1a';
+      canvasModalBorderColor.value = '#204a3e';
+      canvasModalTextColor.value = '#e8fff5';
+      canvasSpinBtnColor.value = '#24d58b';
+      canvasSpinBtnHoverColor.value = '#2be68b';
+      canvasSpinBtnBorderColor.value = '#0fb168';
+      
+      // Reset claim button settings
+      claimAction.value = 'modal';
+      claimUrl.value = '';
+      claimUrlRow.style.display = 'none';
+      
+      // Reset guaranteed prize
+      guaranteedPrize.value = '';
+      
+      // Save and refresh
+      saveTemplates();
+      refreshTemplateUI();
+      drawWheel(true);
+      drawTopbar();
+      drawSpinButton();
+      showToast('🔄 Reset to default settings');
       
       // Reset wheel size
       sizeRange.value = '1.6';
@@ -687,22 +794,35 @@
   // Modal close handlers
   document.querySelectorAll('.modal-close').forEach(btn=> btn.addEventListener('click', (e)=> closeModal(e.target.getAttribute('data-close'))));
 
-  function spin(){
-    if(spinning) return;
-    if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
-    const chosen = pickWeighted(SLICES);
-    const idx = SLICES.indexOf(chosen);
-    // Land exactly at the slice center
-    const targetCenter = centerAngleForIndex(idx);
-    const fullSpins = (5 + Math.floor(Math.random()*3)) * TWO_PI; // 5-7 full spins
-    rotStart = wheel.rotation % TWO_PI;
-    rotEnd   = targetCenter + fullSpins;
-    duration = 4.25 + Math.random()*0.9;
-    t = 0; spinning = true;
-    updateSpinButtonState(); // Update button state
-    sfxSpin();
-    spin._result = chosen;
-  }
+   function spin(){
+     if(spinning) return;
+     if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+     
+     // Check for guaranteed prize first
+     let chosen;
+     if (active.settings && active.settings.guaranteedPrize) {
+       // Use guaranteed prize
+       chosen = SLICES.find(slice => slice.id === active.settings.guaranteedPrize);
+       if (!chosen) {
+         // Fallback to random if guaranteed prize not found
+         chosen = pickWeighted(SLICES);
+       }
+     } else {
+       // Use weighted selection - prize weights are ALWAYS respected
+       chosen = pickWeighted(SLICES);
+     }
+     
+     const idx = SLICES.indexOf(chosen);
+     const targetCenter = centerAngleForIndex(idx);
+     const fullSpins = (5 + Math.floor(Math.random()*3)) * TWO_PI; // 5-7 full spins
+     rotStart = wheel.rotation % TWO_PI;
+     rotEnd   = targetCenter + fullSpins;
+     duration = 4.25 + Math.random()*0.9;
+     t = 0; spinning = true;
+     updateSpinButtonState(); // Update button state
+     sfxSpin();
+     spin._result = chosen;
+   }
   async function onSpinComplete(){
     spinning = false; // Reset spinning state
     updateSpinButtonState(); // Update button state
@@ -853,8 +973,6 @@
     const cardHeight = 300;
     const cardX = (app.screen.width - cardWidth) / 2;
     const cardY = (app.screen.height - cardHeight) / 2;
-    console.log('Screen dimensions:', app.screen.width, 'x', app.screen.height);
-    console.log('Calculated modal position:', cardX, cardY);
     
     const card = new PIXI.Graphics();
     card.beginFill(0x1a1a1a);
@@ -1485,6 +1603,30 @@
       claimUrlRow.style.display = 'none';
     }
 
+    // Canvas color settings
+    if (active.colors) {
+      canvasBtnPrimaryColor.value = active.colors.canvasBtnPrimary || '#17342c';
+      canvasBtnHoverColor.value = active.colors.canvasBtnHover || '#1b3e33';
+      canvasBtnTextColor.value = active.colors.canvasBtnText || '#d9fff2';
+      canvasModalBgColor.value = active.colors.canvasModalBg || '#0e1f1a';
+      canvasModalBorderColor.value = active.colors.canvasModalBorder || '#204a3e';
+      canvasModalTextColor.value = active.colors.canvasModalText || '#e8fff5';
+      canvasSpinBtnColor.value = active.colors.canvasSpinBtn || '#24d58b';
+      canvasSpinBtnHoverColor.value = active.colors.canvasSpinBtnHover || '#2be68b';
+      canvasSpinBtnBorderColor.value = active.colors.canvasSpinBtnBorder || '#0fb168';
+    }
+
+    // Guaranteed prize settings
+    if (active.settings) {
+      guaranteedPrize.value = active.settings.guaranteedPrize || '';
+    } else {
+      guaranteedPrize.value = '';
+    }
+    
+    // Populate guaranteed prize dropdown
+    guaranteedPrize.innerHTML = '<option value="">Random Prize (Normal)</option>' + 
+      SLICES.map(slice => `<option value="${slice.id}">${slice.label}</option>`).join('');
+
     forceSelect.innerHTML = '<option value="">Force Prize (QA)</option>' + SLICES.map((s,i)=>`<option value="${i}">${s.label}</option>`).join('');
     updateSoundButton();
   }
@@ -1740,9 +1882,24 @@ function generateStandaloneHTML(templateData) {
     let muted = false;
     function isSoundOn(){ return !muted; }
     function updateSoundButton(){ 
-      // Update canvas sound button text
-      if (soundButton && soundButton.children[0]) {
-        soundButton.children[0].text = (isSoundOn()? '🔊 Sound' : '🔇 Sound');
+      // Update canvas sound button text or image
+      if (soundButton) {
+        if (active.assets?.canvasSoundUnmute || active.assets?.canvasSoundMute) {
+          // Use images for sound button
+          const imageAsset = isSoundOn() ? active.assets.canvasSoundUnmute : active.assets.canvasSoundMute;
+          if (imageAsset) {
+            soundButton.removeChildren();
+            const sprite = new PIXI.Sprite(PIXI.Texture.from(imageAsset));
+            sprite.width = 80;
+            sprite.height = 35;
+            soundButton.addChild(sprite);
+          }
+        } else {
+          // Use text for sound button
+          if (soundButton.children[0]) {
+            soundButton.children[0].text = (isSoundOn()? '🔊 Sound' : '🔇 Sound');
+          }
+        }
       }
     }
     function playTone(f=880,t=0.15,type='triangle',v=0.08){
@@ -1813,26 +1970,11 @@ function generateStandaloneHTML(templateData) {
     document.getElementById('btnSound').addEventListener('click', ()=>{ muted = !muted; updateSoundButton(); });
     document.querySelectorAll('.modal-close').forEach(btn=> btn.addEventListener('click', (e)=> document.querySelector(e.target.getAttribute('data-close')).classList.remove('show')));
     
-    function spin(){
-      if(spinning) return;
-      if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
-      
-      // Always use weighted selection - prize weights are ALWAYS respected
-      const chosen = pickWeighted(SLICES);
-      const idx = SLICES.indexOf(chosen);
-      const targetCenter = centerAngleForIndex(idx);
-      
-      const fullSpins = (5 + Math.floor(Math.random()*3)) * TWO_PI;
-      rotStart = wheel.rotation % TWO_PI;
-      rotEnd   = targetCenter + fullSpins;
-      duration = 4.25 + Math.random()*0.9;
-      t = 0; spinning = true;
-      sfxSpin();
-      spin._result = chosen;
-    }
     async function onSpinComplete(){
-      spinBtn.disabled=false;
+      spinning = false; // Reset spinning state
+      updateSpinButtonState(); // Update button state
       const res=spin._result;
+      addHistory({ ts: Date.now(), template: active.name, prize: res.label });
       sfxWin(); spawnConfetti(140);
       
       // Show congratulations modal for prize announcement
@@ -1857,11 +1999,17 @@ function generateStandaloneHTML(templateData) {
       const rightMargin = 16;
       const topMargin = 16;
       
+      // Get colors from settings
+      const primaryColor = parseInt(active.colors?.canvasBtnPrimary?.replace('#', '') || '17342c', 16);
+      const hoverColor = parseInt(active.colors?.canvasBtnHover?.replace('#', '') || '1b3e33', 16);
+      const textColor = parseInt(active.colors?.canvasBtnText?.replace('#', '') || 'd9fff2', 16);
+      const borderColor = parseInt('23493d', 16);
+      
       // Create buttons
       const buttons = [
-        { id: 'btnRewards', text: '🏆 Rewards', action: 'rewards' },
-        { id: 'btnInfo', text: 'ℹ️ Info', action: 'info' },
-        { id: 'btnSound', text: '🔊 Sound', action: 'sound' }
+        { id: 'btnRewards', text: '🏆 Rewards', action: 'rewards', image: active.assets?.canvasRewardsBtn },
+        { id: 'btnInfo', text: 'ℹ️ Info', action: 'info', image: active.assets?.canvasInfoBtn },
+        { id: 'btnSound', text: '🔊 Sound', action: 'sound', image: active.assets?.canvasSoundUnmute }
       ];
       
       buttons.forEach((btn, index) => {
@@ -1869,52 +2017,64 @@ function generateStandaloneHTML(templateData) {
         const x = vw - rightMargin - (buttonWidth + gap) * (buttons.length - index);
         const y = topMargin;
         
-        // Button background
-        button.beginFill(0x17342c);
-        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-        button.endFill();
+        // Use image if available, otherwise use colors
+        if (btn.image) {
+          const sprite = new PIXI.Sprite(PIXI.Texture.from(btn.image));
+          sprite.width = buttonWidth;
+          sprite.height = buttonHeight;
+          button.addChild(sprite);
+        } else {
+          // Button background
+          button.beginFill(primaryColor);
+          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          button.endFill();
+          
+          // Button border
+          button.lineStyle(1, borderColor);
+          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+        }
         
-        // Button border
-        button.lineStyle(1, 0x23493d);
-        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-        
-        // Button text
-        const text = new PIXI.Text(btn.text, {
-          fontFamily: 'Arial',
-          fontSize: 12,
-          fill: 0xd9fff2,
-          fontWeight: 'bold'
-        });
-        text.anchor.set(0.5);
-        text.x = buttonWidth / 2;
-        text.y = buttonHeight / 2;
-        button.addChild(text);
+        // Button text (only if no image)
+        if (!btn.image) {
+          const text = new PIXI.Text(btn.text, {
+            fontFamily: 'Arial',
+            fontSize: 12,
+            fill: textColor,
+            fontWeight: 'bold'
+          });
+          text.anchor.set(0.5);
+          text.x = buttonWidth / 2;
+          text.y = buttonHeight / 2;
+          button.addChild(text);
+        }
         
         button.x = x;
         button.y = y;
         button.interactive = true;
         button.buttonMode = true;
         
-        // Hover effects
-        button.on('pointerover', () => {
-          button.clear();
-          button.beginFill(0x1b3e33);
-          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-          button.endFill();
-          button.lineStyle(1, 0x23493d);
-          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-          button.addChild(text);
-        });
-        
-        button.on('pointerout', () => {
-          button.clear();
-          button.beginFill(0x17342c);
-          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-          button.endFill();
-          button.lineStyle(1, 0x23493d);
-          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-          button.addChild(text);
-        });
+        // Hover effects (only if no image)
+        if (!btn.image) {
+          button.on('pointerover', () => {
+            button.clear();
+            button.beginFill(hoverColor);
+            button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+            button.endFill();
+            button.lineStyle(1, borderColor);
+            button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+            button.addChild(text);
+          });
+          
+          button.on('pointerout', () => {
+            button.clear();
+            button.beginFill(primaryColor);
+            button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+            button.endFill();
+            button.lineStyle(1, borderColor);
+            button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+            button.addChild(text);
+          });
+        }
         
         // Click handler
         button.on('pointerdown', () => {
@@ -1961,9 +2121,14 @@ function generateStandaloneHTML(templateData) {
       const cardX = (vw - cardWidth) / 2;
       const cardY = (vh - cardHeight) / 2;
       
+      // Get colors from settings
+      const modalBgColor = parseInt(active.colors?.canvasModalBg?.replace('#', '') || '0e1f1a', 16);
+      const modalBorderColor = parseInt(active.colors?.canvasModalBorder?.replace('#', '') || '204a3e', 16);
+      const modalTextColor = parseInt(active.colors?.canvasModalText?.replace('#', '') || 'e8fff5', 16);
+      
       const card = new PIXI.Graphics();
-      card.beginFill(0x0e1f1a);
-      card.lineStyle(1, 0x204a3e);
+      card.beginFill(modalBgColor);
+      card.lineStyle(1, modalBorderColor);
       card.drawRoundedRect(0, 0, cardWidth, cardHeight, 14);
       card.endFill();
       card.x = cardX;
@@ -1973,11 +2138,11 @@ function generateStandaloneHTML(templateData) {
       // Modal header
       const headerHeight = 50;
       const header = new PIXI.Graphics();
-      header.beginFill(0x0e1f1a);
-      header.lineStyle(1, 0x204a3e, 0, 0);
+      header.beginFill(modalBgColor);
+      header.lineStyle(1, modalBorderColor, 0, 0);
       header.drawRect(0, 0, cardWidth, headerHeight);
       header.endFill();
-      header.lineStyle(1, 0x204a3e);
+      header.lineStyle(1, modalBorderColor);
       header.moveTo(0, headerHeight);
       header.lineTo(cardWidth, headerHeight);
       card.addChild(header);
@@ -1988,7 +2153,7 @@ function generateStandaloneHTML(templateData) {
         {
           fontFamily: 'Arial',
           fontSize: 14,
-          fill: 0xa3ffe0,
+          fill: modalTextColor,
           fontWeight: 'bold'
         }
       );
@@ -2031,7 +2196,7 @@ function generateStandaloneHTML(templateData) {
           const emptyText = new PIXI.Text('No prizes won yet. Spin the wheel to win prizes!', {
             fontFamily: 'Arial',
             fontSize: 16,
-            fill: 0xe8fff5,
+            fill: modalTextColor,
             wordWrap: true,
             wordWrapWidth: cardWidth - 40
           });
@@ -2112,7 +2277,7 @@ function generateStandaloneHTML(templateData) {
         const contentText = new PIXI.Text('${terms || 'No terms specified.'}', {
           fontFamily: 'Arial',
           fontSize: 14,
-          fill: 0xe8fff5,
+          fill: modalTextColor,
           wordWrap: true,
           wordWrapWidth: cardWidth - 40
         });
@@ -2279,14 +2444,12 @@ function generateStandaloneHTML(templateData) {
         hideCanvasCongratsModal();
       });
       
-      // Add hover effects for debugging
+      // Add hover effects
       claimBtn.on('pointerover', () => {
-        console.log('Claim button hovered');
         claimBtn.alpha = 0.8;
       });
       
       claimBtn.on('pointerout', () => {
-        console.log('Claim button unhovered');
         claimBtn.alpha = 1.0;
       });
       
@@ -2327,36 +2490,49 @@ function generateStandaloneHTML(templateData) {
       const buttonX = (vw - buttonWidth) / 2;
       const buttonY = vh - 100 * dpr; // Position at bottom center
       
+      // Get colors from settings
+      const primaryColor = parseInt(active.colors?.canvasSpinBtn?.replace('#', '') || '24d58b', 16);
+      const hoverColor = parseInt(active.colors?.canvasSpinBtnHover?.replace('#', '') || '2be68b', 16);
+      const borderColor = parseInt(active.colors?.canvasSpinBtnBorder?.replace('#', '') || '0fb168', 16);
+      
       // Create button graphics
       spinButton = new PIXI.Graphics();
       
-      // Button background with gradient effect
-      spinButton.beginFill(0x24d58b);
-      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-      spinButton.endFill();
-      
-      // Button border
-      spinButton.lineStyle(2 * dpr, 0x0fb168);
-      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-      
-      // Button shadow effect
-      spinButton.beginFill(0x000000, 0.2);
-      spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
-      spinButton.endFill();
-      
-      // Button text
-      const text = new PIXI.Text('SPIN', {
-        fontFamily: 'Arial, sans-serif',
-        fontSize: 20 * dpr,
-        fill: 0xffffff,
-        fontWeight: 'bold',
-        stroke: 0x000000,
-        strokeThickness: 1 * dpr
-      });
-      text.anchor.set(0.5);
-      text.x = buttonWidth / 2;
-      text.y = buttonHeight / 2;
-      spinButton.addChild(text);
+      // Use image if available, otherwise use colors
+      if (active.assets?.canvasSpinBtn) {
+        const sprite = new PIXI.Sprite(PIXI.Texture.from(active.assets.canvasSpinBtn));
+        sprite.width = buttonWidth;
+        sprite.height = buttonHeight;
+        spinButton.addChild(sprite);
+      } else {
+        // Button background with gradient effect
+        spinButton.beginFill(primaryColor);
+        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.endFill();
+        
+        // Button border
+        spinButton.lineStyle(2 * dpr, borderColor);
+        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+        
+        // Button shadow effect
+        spinButton.beginFill(0x000000, 0.2);
+        spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.endFill();
+        
+        // Button text (only if no image)
+        const text = new PIXI.Text('SPIN', {
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 20 * dpr,
+          fill: 0xffffff,
+          fontWeight: 'bold',
+          stroke: 0x000000,
+          strokeThickness: 1 * dpr
+        });
+        text.anchor.set(0.5);
+        text.x = buttonWidth / 2;
+        text.y = buttonHeight / 2;
+        spinButton.addChild(text);
+      }
       
       spinButton.x = buttonX;
       spinButton.y = buttonY;
@@ -2364,32 +2540,34 @@ function generateStandaloneHTML(templateData) {
       spinButton.buttonMode = true;
       spinButton.cursor = 'pointer';
       
-      // Hover effects
-      spinButton.on('pointerover', () => {
-        spinButton.clear();
-        spinButton.beginFill(0x2be68b);
-        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-        spinButton.endFill();
-        spinButton.lineStyle(2 * dpr, 0x0fb168);
-        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-        spinButton.beginFill(0x000000, 0.2);
-        spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
-        spinButton.endFill();
-        spinButton.addChild(text);
-      });
-      
-      spinButton.on('pointerout', () => {
-        spinButton.clear();
-        spinButton.beginFill(0x24d58b);
-        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-        spinButton.endFill();
-        spinButton.lineStyle(2 * dpr, 0x0fb168);
-        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-        spinButton.beginFill(0x000000, 0.2);
-        spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
-        spinButton.endFill();
-        spinButton.addChild(text);
-      });
+      // Hover effects (only if no image)
+      if (!active.assets?.canvasSpinBtn) {
+        spinButton.on('pointerover', () => {
+          spinButton.clear();
+          spinButton.beginFill(hoverColor);
+          spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+          spinButton.endFill();
+          spinButton.lineStyle(2 * dpr, borderColor);
+          spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+          spinButton.beginFill(0x000000, 0.2);
+          spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+          spinButton.endFill();
+          spinButton.addChild(text);
+        });
+        
+        spinButton.on('pointerout', () => {
+          spinButton.clear();
+          spinButton.beginFill(primaryColor);
+          spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+          spinButton.endFill();
+          spinButton.lineStyle(2 * dpr, borderColor);
+          spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+          spinButton.beginFill(0x000000, 0.2);
+          spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+          spinButton.endFill();
+          spinButton.addChild(text);
+        });
+      }
       
       // Click handler - call the same spin function
       spinButton.on('pointerdown', () => {
