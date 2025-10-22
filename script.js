@@ -26,7 +26,7 @@
   // Responsive ---------------------------------------------------------------
   let sizeMultiplier = 1.6; let autoMultiplier = 1;
   function computeAutoMultiplier(){ const vw=app.renderer.width, vh=app.renderer.height; const minEdge=Math.min(vw,vh); const targetDiameter=minEdge*0.8; autoMultiplier = targetDiameter/(CONFIG.BASE_RADIUS*2); autoMultiplier=Math.max(0.6, Math.min(1.6, autoMultiplier)); }
-  function layout(){ const vw=app.renderer.width, vh=app.renderer.height; const scale=Math.min(vw/DESIGN.w, vh/DESIGN.h); root.scale.set(scale); root.x=vw/2-(DESIGN.w*scale)/2; root.y=vh/2-(DESIGN.h*scale)/2; wheelContainer.x=DESIGN.w/2; wheelContainer.y=(vw>vh)? DESIGN.h/2-20 : DESIGN.h/2-120; drawBackground(); computeAutoMultiplier(); drawWheel(); drawLogo(); drawTopbar(); drawSpinButton(); }
+  function layout(){ const vw=app.renderer.width, vh=app.renderer.height; const scale=Math.min(vw/DESIGN.w, vh/DESIGN.h); root.scale.set(scale); root.x=vw/2-(DESIGN.w*scale)/2; root.y=vh/2-(DESIGN.h*scale)/2; wheelContainer.x=DESIGN.w/2; wheelContainer.y=(vw>vh)? DESIGN.h/2-40 : DESIGN.h/2-80; drawBackground(); computeAutoMultiplier(); drawWheel(); drawLogo(); drawTopbar(); drawSpinButton(); }
   app.renderer.on('resize', layout);
 
   // ---- Templates -----------------------------------------------------------
@@ -34,7 +34,7 @@
   function defaultTemplate(){ return { name:'Default', terms:`By participating you agree:
 • One spin per session.
 • Prizes are non-transferable.
-• Organizer reserves the right to modify terms.`, prizesText:'🎁 iPhone 15 Pro | 1 | #25c77a\n💰 RM 50 Credit | 2 | #E9FFF7\n🎉 Mystery Gift | 1 | #25c77a\n🧧 Angpao RM 10 | 2 | #E9FFF7\n🍀 Free Spin | 3 | #25c77a\n💎 Mega Gift Box | 0.5 | #E9FFF7', assets:{bg:null,logo:null,spin:null,rewardsBtn:null,infoBtn:null,soundUnmute:null,soundMute:null,rewardsModal:null,rewardsClose:null,infoModal:null,infoClose:null,wheel:null,canvasRewardsBtn:null,canvasInfoBtn:null,canvasSoundUnmute:null,canvasSoundMute:null,canvasSpinBtn:null,canvasRewardsModal:null,canvasInfoModal:null,canvasCongratsModal:null}, colors:{pageBackground:{type:'color',style:'#0a2b22'},spinButton:{type:'gradient',style:'linear-gradient(to bottom, #24d58b, #0fb168)'},canvasBtnPrimary:'#17342c',canvasBtnHover:'#1b3e33',canvasBtnText:'#d9fff2',canvasModalBg:'#0e1f1a',canvasModalBorder:'#204a3e',canvasModalText:'#e8fff5',canvasSpinBtn:'#24d58b',canvasSpinBtnHover:'#2be68b',canvasSpinBtnBorder:'#0fb168'}, settings:{claimAction:'modal',claimUrl:'',guaranteedPrize:''} }; }
+• Organizer reserves the right to modify terms.`, prizesText:'🎁 iPhone 15 Pro | 1 | #25c77a\n💰 RM 50 Credit | 2 | #E9FFF7\n🎉 Mystery Gift | 1 | #25c77a\n🧧 Angpao RM 10 | 2 | #E9FFF7\n🍀 Free Spin | 3 | #25c77a\n💎 Mega Gift Box | 0.5 | #E9FFF7', assets:{bg:null,logo:null,spin:null,rewardsBtn:null,infoBtn:null,soundUnmute:null,soundMute:null,rewardsModal:null,rewardsClose:null,infoModal:null,infoClose:null,wheel:null,canvasRewardsBtn:null,canvasInfoBtn:null,canvasSoundUnmute:null,canvasSoundMute:null,canvasSpinBtn:null,canvasRewardsModal:null,canvasRewardsClose:null,canvasInfoModal:null,canvasInfoClose:null,canvasCongratsModal:null,canvasCongratsClose:null}, colors:{pageBackground:{type:'color',style:'#0a2b22'},spinButton:{type:'gradient',style:'linear-gradient(to bottom, #24d58b, #0fb168)'},canvasBtnPrimary:'#17342c',canvasBtnHover:'#1b3e33',canvasBtnText:'#d9fff2',canvasModalBg:'#0e1f1a',canvasModalBorder:'#204a3e',canvasModalText:'#e8fff5',canvasSpinBtn:'#24d58b',canvasSpinBtnHover:'#2be68b',canvasSpinBtnBorder:'#0fb168'}, settings:{claimAction:'modal',claimUrl:'',guaranteedPrize:''} }; }
   function loadTemplates(){ try{ const arr=JSON.parse(localStorage.getItem(LS_KEY)||'[]'); if(Array.isArray(arr)&&arr.length) return arr; }catch{} const seed=[defaultTemplate()]; localStorage.setItem(LS_KEY, JSON.stringify(seed)); return seed; }
   function saveTemplates(){ localStorage.setItem(LS_KEY, JSON.stringify(templates)); }
   let templates = loadTemplates(); let activeIndex=0; let active=templates[activeIndex];
@@ -83,45 +83,12 @@
   const logoFile = document.getElementById('logoFile');
   const logoClear = document.getElementById('logoClear');
 
-  // Spin Button elements
-  const spinBtnType = document.getElementById('spinBtnType');
-  const spinBtnColor = document.getElementById('spinBtnColor');
-  const spinBtnGradient1 = document.getElementById('spinBtnGradient1');
-  const spinBtnGradient2 = document.getElementById('spinBtnGradient2');
-  const spinBtnGradientDirection = document.getElementById('spinBtnGradientDirection');
-  const spinBtnColorRow = document.getElementById('spinBtnColorRow');
-  const spinBtnGradientRow = document.getElementById('spinBtnGradientRow');
-  const spinBtnImageRow = document.getElementById('spinBtnImageRow');
-  const spinBtnFile = document.getElementById('spinBtnFile');
-  const spinBtnClear = document.getElementById('spinBtnClear');
 
-  // Rewards Button elements
-  const rewardsBtnFile = document.getElementById('rewardsBtnFile');
-  const rewardsBtnClear = document.getElementById('rewardsBtnClear');
-
-  // Info Button elements
-  const infoBtnFile = document.getElementById('infoBtnFile');
-  const infoBtnClear = document.getElementById('infoBtnClear');
-
-  // Sound Button elements
-  const soundUnmuteFile = document.getElementById('soundUnmuteFile');
-  const soundUnmuteClear = document.getElementById('soundUnmuteClear');
-  const soundMuteFile = document.getElementById('soundMuteFile');
-  const soundMuteClear = document.getElementById('soundMuteClear');
 
   // Wheel Image elements
   const wheelFile = document.getElementById('wheelFile');
   const wheelClear = document.getElementById('wheelClear');
 
-  // Modal Background elements
-  const rewardsModalFile = document.getElementById('rewardsModalFile');
-  const rewardsModalClear = document.getElementById('rewardsModalClear');
-  const rewardsCloseFile = document.getElementById('rewardsCloseFile');
-  const rewardsCloseClear = document.getElementById('rewardsCloseClear');
-  const infoModalFile = document.getElementById('infoModalFile');
-  const infoModalClear = document.getElementById('infoModalClear');
-  const infoCloseFile = document.getElementById('infoCloseFile');
-  const infoCloseClear = document.getElementById('infoCloseClear');
   
   // Reset button
   const resetToDefault = document.getElementById('resetToDefault');
@@ -248,24 +215,7 @@
   logoFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.logo=await fileToDataURL(f); saveTemplates(); drawLogo(); showToast('🖼️ Logo set'); });
   logoClear.addEventListener('click', ()=>{ active.assets.logo=null; saveTemplates(); drawLogo(); });
   
-  // Spin Button handlers
-  spinBtnFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.spin=await fileToDataURL(f); saveTemplates(); drawWheel(true); showToast('🖼️ Spin button image set'); });
-  spinBtnClear.addEventListener('click', ()=>{ active.assets.spin=null; saveTemplates(); drawWheel(true); });
   
-  // Rewards Button handlers
-  rewardsBtnFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.rewardsBtn=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Rewards button image set'); });
-  rewardsBtnClear.addEventListener('click', ()=>{ active.assets.rewardsBtn=null; saveTemplates(); });
-  
-  // Info Button handlers
-  infoBtnFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.infoBtn=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Info button image set'); });
-  infoBtnClear.addEventListener('click', ()=>{ active.assets.infoBtn=null; saveTemplates(); });
-  
-  // Sound Button handlers
-  soundUnmuteFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.soundUnmute=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Unmute button image set'); });
-  soundUnmuteClear.addEventListener('click', ()=>{ active.assets.soundUnmute=null; saveTemplates(); });
-  
-  soundMuteFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.soundMute=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Mute button image set'); });
-  soundMuteClear.addEventListener('click', ()=>{ active.assets.soundMute=null; saveTemplates(); });
 
   // Wheel Image handlers
   wheelFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.wheel=await fileToDataURL(f); saveTemplates(); drawWheel(true); showToast('🖼️ Wheel image set - Prize weights still work!'); });
@@ -284,10 +234,16 @@
   const canvasSpinBtnClear = document.getElementById('canvasSpinBtnClear');
   const canvasRewardsModalFile = document.getElementById('canvasRewardsModalFile');
   const canvasRewardsModalClear = document.getElementById('canvasRewardsModalClear');
+  const canvasRewardsCloseFile = document.getElementById('canvasRewardsCloseFile');
+  const canvasRewardsCloseClear = document.getElementById('canvasRewardsCloseClear');
   const canvasInfoModalFile = document.getElementById('canvasInfoModalFile');
   const canvasInfoModalClear = document.getElementById('canvasInfoModalClear');
+  const canvasInfoCloseFile = document.getElementById('canvasInfoCloseFile');
+  const canvasInfoCloseClear = document.getElementById('canvasInfoCloseClear');
   const canvasCongratsModalFile = document.getElementById('canvasCongratsModalFile');
   const canvasCongratsModalClear = document.getElementById('canvasCongratsModalClear');
+  const canvasCongratsCloseFile = document.getElementById('canvasCongratsCloseFile');
+  const canvasCongratsCloseClear = document.getElementById('canvasCongratsCloseClear');
 
   // Canvas color controls
   const canvasBtnPrimaryColor = document.getElementById('canvasBtnPrimaryColor');
@@ -321,12 +277,18 @@
   
   canvasRewardsModalFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasRewardsModal=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Canvas Rewards modal background set'); });
   canvasRewardsModalClear.addEventListener('click', ()=>{ active.assets.canvasRewardsModal=null; saveTemplates(); });
+  canvasRewardsCloseFile?.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasRewardsClose=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Canvas Rewards close button set'); });
+  canvasRewardsCloseClear?.addEventListener('click', ()=>{ active.assets.canvasRewardsClose=null; saveTemplates(); });
   
   canvasInfoModalFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasInfoModal=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Canvas Info modal background set'); });
   canvasInfoModalClear.addEventListener('click', ()=>{ active.assets.canvasInfoModal=null; saveTemplates(); });
+  canvasInfoCloseFile?.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasInfoClose=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Canvas Info close button set'); });
+  canvasInfoCloseClear?.addEventListener('click', ()=>{ active.assets.canvasInfoClose=null; saveTemplates(); });
   
   canvasCongratsModalFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasCongratsModal=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Canvas Congratulations modal background set'); });
   canvasCongratsModalClear.addEventListener('click', ()=>{ active.assets.canvasCongratsModal=null; saveTemplates(); });
+  canvasCongratsCloseFile?.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasCongratsClose=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Canvas Congratulations close button set'); });
+  canvasCongratsCloseClear?.addEventListener('click', ()=>{ active.assets.canvasCongratsClose=null; saveTemplates(); });
 
   // Canvas color event handlers
   canvasBtnPrimaryColor.addEventListener('change', ()=>{ active.colors.canvasBtnPrimary=canvasBtnPrimaryColor.value; saveTemplates(); drawTopbar(); });
@@ -355,18 +317,6 @@
     }
   });
 
-  // Modal Background handlers
-  rewardsModalFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.rewardsModal=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Rewards modal background set'); });
-  rewardsModalClear.addEventListener('click', ()=>{ active.assets.rewardsModal=null; saveTemplates(); });
-  
-  rewardsCloseFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.rewardsClose=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Rewards close button set'); });
-  rewardsCloseClear.addEventListener('click', ()=>{ active.assets.rewardsClose=null; saveTemplates(); });
-  
-  infoModalFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.infoModal=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Info modal background set'); });
-  infoModalClear.addEventListener('click', ()=>{ active.assets.infoModal=null; saveTemplates(); });
-  
-  infoCloseFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.infoClose=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Info close button set'); });
-  infoCloseClear.addEventListener('click', ()=>{ active.assets.infoClose=null; saveTemplates(); });
 
   // Prize area ---------------------------------------------------------------
   applyBtn.addEventListener('click', ()=>{
@@ -392,13 +342,6 @@
   });
   
   
-  spinBtnType.addEventListener('change', ()=>{
-    const type = spinBtnType.value;
-    spinBtnColorRow.style.display = type === 'color' ? 'flex' : 'none';
-    spinBtnGradientRow.style.display = type === 'gradient' ? 'flex' : 'none';
-    spinBtnImageRow.style.display = type === 'image' ? 'flex' : 'none';
-    updateSpinButton();
-  });
   
   
   
@@ -410,10 +353,6 @@
   pageBgGradientDirection.addEventListener('change', updatePageBackground);
   
   
-  spinBtnColor.addEventListener('input', updateSpinButton);
-  spinBtnGradient1.addEventListener('input', updateSpinButton);
-  spinBtnGradient2.addEventListener('input', updateSpinButton);
-  spinBtnGradientDirection.addEventListener('change', updateSpinButton);
   
   
   
@@ -428,6 +367,8 @@
       active.assets = defaultTpl.assets;
       active.colors = defaultTpl.colors;
       active.settings = defaultTpl.settings;
+      // Persist immediately so UI reflects defaults
+      saveTemplates();
       
       // Reset UI elements
       templateName.value = active.name;
@@ -457,11 +398,30 @@
       // Reset guaranteed prize
       guaranteedPrize.value = '';
       
-      // Save and refresh
-      saveTemplates();
+      // Clear all file inputs so re-uploading same file triggers change
+      [
+        pageBgFile,
+        logoFile,
+        wheelFile,
+        canvasRewardsBtnFile,
+        canvasInfoBtnFile,
+        canvasSoundUnmuteFile,
+        canvasSoundMuteFile,
+        canvasSpinBtnFile,
+        canvasRewardsModalFile,
+        canvasRewardsCloseFile,
+        canvasInfoModalFile,
+        canvasInfoCloseFile,
+        canvasCongratsModalFile,
+        canvasCongratsCloseFile
+      ].forEach((inp)=>{ if(inp) inp.value=''; });
+
+      // Refresh
       refreshTemplateUI();
+      drawBackground();
       drawWheel(true);
       drawTopbar();
+      updateSoundButton?.();
       drawSpinButton();
       showToast('🔄 Reset to default settings');
       
@@ -515,10 +475,12 @@
     
     if(bgStyle) {
       document.body.style.background = bgStyle;
-      // Store in template for export
+      // Store in template for export and canvas
       if(!active.colors) active.colors = {};
       active.colors.pageBackground = { type, style: bgStyle };
       saveTemplates();
+      // Redraw canvas background if using color
+      drawBackground();
     }
   }
   
@@ -527,39 +489,6 @@
     saveTemplates();
   }
   
-  function updateSpinButton() {
-    const type = spinBtnType.value;
-    let btnStyle = '';
-    
-    if(type === 'color') {
-      btnStyle = spinBtnColor.value;
-    } else if(type === 'gradient') {
-      const direction = spinBtnGradientDirection.value;
-      const color1 = spinBtnGradient1.value;
-      const color2 = spinBtnGradient2.value;
-      
-      if(direction === 'radial') {
-        btnStyle = `radial-gradient(circle, ${color1}, ${color2})`;
-      } else {
-        btnStyle = `linear-gradient(${direction}, ${color1}, ${color2})`;
-      }
-    }
-    
-    if(btnStyle) {
-      const spinBtn = document.getElementById('spinBtn');
-      if(type === 'color') {
-        spinBtn.style.background = btnStyle;
-        spinBtn.style.backgroundImage = 'none';
-      } else {
-        spinBtn.style.background = btnStyle;
-      }
-      
-      // Store in template for export
-      if(!active.colors) active.colors = {};
-      active.colors.spinButton = { type, style: btnStyle };
-      saveTemplates();
-    }
-  }
   
   
 
@@ -607,8 +536,50 @@
   wheelContainer.addChild(base, rim, wheel, dots, hubLayer, pointer);
   let WHEEL_RADIUS = CONFIG.BASE_RADIUS;
 
-  function drawBackground(){ bgSprite.texture=PIXI.Texture.EMPTY; if(active.assets.bg){ bgSprite.texture=PIXI.Texture.from(active.assets.bg); } const vw=app.renderer.width, vh=app.renderer.height; if(bgSprite.texture.baseTexture.valid){ const iw=bgSprite.texture.width, ih=bgSprite.texture.height; const s=Math.max(vw/iw, vh/ih); bgSprite.scale.set(s); bgSprite.x=(vw - iw*s)/2; bgSprite.y=(vh - ih*s)/2; } }
-  function drawLogo(){ logoSprite.texture=PIXI.Texture.EMPTY; if(active.assets.logo){ logoSprite.texture=PIXI.Texture.from(active.assets.logo); } logoSprite.anchor.set?.(0.5,0.5); const sc=0.5; logoSprite.scale.set(sc, sc); logoSprite.x = root.x + root.scale.x*(DESIGN.w/2); logoSprite.y = root.y + root.scale.y*(DESIGN.h/2 - 420); }
+  function drawBackground(){
+    const vw=app.renderer.width, vh=app.renderer.height;
+    // Default: clear
+    bgSprite.tint = 0xFFFFFF;
+    bgSprite.texture = PIXI.Texture.EMPTY;
+    
+    // If background image is set, use it
+    if(active.assets.bg){
+      bgSprite.texture = PIXI.Texture.from(active.assets.bg);
+      if(bgSprite.texture.baseTexture.valid){
+        const iw=bgSprite.texture.width, ih=bgSprite.texture.height;
+        const s=Math.max(vw/iw, vh/ih);
+        bgSprite.scale.set(s);
+        bgSprite.x=(vw - iw*s)/2; bgSprite.y=(vh - ih*s)/2;
+      }
+      return;
+    }
+    
+    // If a solid page background color is configured, paint it inside canvas
+    const pg = active.colors?.pageBackground;
+    if(pg && pg.type === 'color' && typeof pg.style === 'string'){
+      // Parse hex like #RRGGBB
+      const hex = pg.style.trim().startsWith('#') ? pg.style.trim().slice(1) : null;
+      if(hex && /^([0-9a-fA-F]{6})$/.test(hex)){
+        const color = parseInt(hex,16);
+        bgSprite.texture = PIXI.Texture.WHITE;
+        bgSprite.tint = color;
+        bgSprite.width = vw; bgSprite.height = vh;
+        bgSprite.x = 0; bgSprite.y = 0;
+      }
+    }
+  }
+  function drawLogo(){ 
+    logoSprite.texture=PIXI.Texture.EMPTY; 
+    if(active.assets.logo){ 
+      logoSprite.texture=PIXI.Texture.from(active.assets.logo); 
+    } 
+    logoSprite.anchor.set?.(0.5,0.5); 
+    const sc=0.4; // Slightly larger scale for better visibility
+    logoSprite.scale.set(sc, sc); 
+    // Position logo with more space above the wheel
+    logoSprite.x = wheelContainer.x; // Center horizontally with wheel
+    logoSprite.y = wheelContainer.y - WHEEL_RADIUS - 140; // More space above the wheel
+  }
 
   function drawWheel(resetRotation=false){
     WHEEL_RADIUS = CONFIG.BASE_RADIUS * sizeMultiplier * autoMultiplier;
@@ -617,6 +588,9 @@
     // clear
     base.clear(); rim.clear(); wheel.removeChildren(); labels.length = 0;
     dots.clear(); hub.clear(); pointer.clear(); hubLayer.removeChildren();
+    
+    // Update logo position when wheel is redrawn
+    drawLogo();
 
     // ensure the custom wheel sprite is inside the rotating 'wheel' container
     if(wheelImageSprite.parent !== wheel){ wheelImageSprite.parent?.removeChild(wheelImageSprite); wheel.addChildAt(wheelImageSprite, 0); }
@@ -718,9 +692,24 @@
   let muted = false; // UI sound state
   function isSoundOn(){ return !muted; }
   function updateSoundButton(){ 
-    // Update canvas sound button text
-    if (soundButton && soundButton.children[0]) {
-      soundButton.children[0].text = (isSoundOn()? '🔊 Sound' : '🔇 Sound');
+    // Update canvas sound button text or image
+    if (soundButton) {
+      if (active.assets?.canvasSoundUnmute || active.assets?.canvasSoundMute) {
+        // Use images for sound button
+        const imageAsset = isSoundOn() ? active.assets.canvasSoundUnmute : active.assets.canvasSoundMute;
+        if (imageAsset) {
+          soundButton.removeChildren();
+          const sprite = new PIXI.Sprite(PIXI.Texture.from(imageAsset));
+          sprite.width = 80;
+          sprite.height = 35;
+          soundButton.addChild(sprite);
+        }
+      } else {
+        // Use text for sound button
+        if (soundButton.children[0]) {
+          soundButton.children[0].text = (isSoundOn()? '🔊 Sound' : '🔇 Sound');
+        }
+      }
     }
   }
   function playTone(f=880,t=0.15,type='triangle',v=0.08){
@@ -974,12 +963,26 @@
     const cardX = (app.screen.width - cardWidth) / 2;
     const cardY = (app.screen.height - cardHeight) / 2;
     
-    const card = new PIXI.Graphics();
-    card.beginFill(0x1a1a1a);
-    card.drawRoundedRect(0, 0, cardWidth, cardHeight, 20);
-    card.endFill();
+    // Card container
+    const card = new PIXI.Container();
     
-    // Add gradient border effect
+    // Background: use uploaded image if present, else solid color
+    if (active.assets?.canvasCongratsModal) {
+      const bgSprite = new PIXI.Sprite(PIXI.Texture.from(active.assets.canvasCongratsModal));
+      bgSprite.width = cardWidth;
+      bgSprite.height = cardHeight;
+      bgSprite.x = 0;
+      bgSprite.y = 0;
+      card.addChild(bgSprite);
+    } else {
+      const cardBg = new PIXI.Graphics();
+      cardBg.beginFill(0x1a1a1a);
+      cardBg.drawRoundedRect(0, 0, cardWidth, cardHeight, 20);
+      cardBg.endFill();
+      card.addChild(cardBg);
+    }
+    
+    // Border overlay
     const border = new PIXI.Graphics();
     border.lineStyle(3, 0x8B5CF6);
     border.drawRoundedRect(0, 0, cardWidth, cardHeight, 20);
@@ -1000,28 +1003,29 @@
     ribbon.y = 30;
     card.addChild(ribbon);
     
-    // Close button
-    const closeBtn = new PIXI.Graphics();
-    closeBtn.beginFill(0x333333);
-    closeBtn.drawCircle(0, 0, 20);
-    closeBtn.endFill();
-    closeBtn.x = cardWidth - 30;
-    closeBtn.y = 30;
-    closeBtn.interactive = true;
-    closeBtn.cursor = 'pointer';
-    closeBtn.on('pointerdown', () => hideCanvasCongratsModal());
-    card.addChild(closeBtn);
-    
-    const closeText = new PIXI.Text('×', {
-      fontFamily: 'Arial',
-      fontSize: 20,
-      fill: 0xffffff,
-      fontWeight: 'bold'
-    });
-    closeText.anchor.set(0.5);
-    closeText.x = cardWidth - 30;
-    closeText.y = 30;
-    card.addChild(closeText);
+    // Close button (image if provided)
+    const closeContainer = new PIXI.Container();
+    closeContainer.x = cardWidth - 30;
+    closeContainer.y = 30;
+    closeContainer.interactive = true;
+    closeContainer.cursor = 'pointer';
+    closeContainer.on('pointerdown', () => hideCanvasCongratsModal());
+    if (active.assets?.canvasCongratsClose) {
+      const closeSprite = new PIXI.Sprite(PIXI.Texture.from(active.assets.canvasCongratsClose));
+      closeSprite.anchor.set(0.5);
+      closeSprite.width = 24; closeSprite.height = 24;
+      closeContainer.addChild(closeSprite);
+    } else {
+      const closeBtn = new PIXI.Graphics();
+      closeBtn.beginFill(0x333333);
+      closeBtn.drawCircle(0, 0, 20);
+      closeBtn.endFill();
+      closeContainer.addChild(closeBtn);
+      const closeText = new PIXI.Text('×', { fontFamily: 'Arial', fontSize: 20, fill: 0xffffff, fontWeight: 'bold' });
+      closeText.anchor.set(0.5);
+      closeContainer.addChild(closeText);
+    }
+    card.addChild(closeContainer);
     
     // Congratulations title
     const title = new PIXI.Text('CONGRATULATIONS!', {
@@ -1194,11 +1198,17 @@
     const rightMargin = 16;
     const topMargin = 16;
     
-    // Create buttons
+    // Get colors from settings
+    const primaryColor = parseInt(active.colors?.canvasBtnPrimary?.replace('#', '') || '17342c', 16);
+    const hoverColor = parseInt(active.colors?.canvasBtnHover?.replace('#', '') || '1b3e33', 16);
+    const textColor = parseInt(active.colors?.canvasBtnText?.replace('#', '') || 'd9fff2', 16);
+    const borderColor = parseInt('23493d', 16);
+    
+    // Create buttons with optional images
     const buttons = [
-      { id: 'btnRewards', text: '🏆 Rewards', action: 'rewards' },
-      { id: 'btnInfo', text: 'ℹ️ Info', action: 'info' },
-      { id: 'btnSound', text: '🔊 Sound', action: 'sound' }
+      { id: 'btnRewards', text: '🏆 Rewards', action: 'rewards', image: active.assets?.canvasRewardsBtn },
+      { id: 'btnInfo', text: 'ℹ️ Info', action: 'info', image: active.assets?.canvasInfoBtn },
+      { id: 'btnSound', text: '🔊 Sound', action: 'sound', image: active.assets?.canvasSoundUnmute }
     ];
     
     buttons.forEach((btn, index) => {
@@ -1206,26 +1216,31 @@
       const x = vw - rightMargin - (buttonWidth + gap) * (buttons.length - index);
       const y = topMargin;
       
-      // Button background
-      button.beginFill(0x17342c);
-      button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-      button.endFill();
-      
-      // Button border
-      button.lineStyle(1, 0x23493d);
-      button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-      
-      // Button text
-      const text = new PIXI.Text(btn.text, {
-        fontFamily: 'Arial',
-        fontSize: 12,
-        fill: 0xd9fff2,
-        fontWeight: 'bold'
-      });
-      text.anchor.set(0.5);
-      text.x = buttonWidth / 2;
-      text.y = buttonHeight / 2;
-      button.addChild(text);
+      let text;
+      if (btn.image) {
+        const sprite = new PIXI.Sprite(PIXI.Texture.from(btn.image));
+        sprite.width = buttonWidth;
+        sprite.height = buttonHeight;
+        button.addChild(sprite);
+      } else {
+        // Draw colored button
+        button.beginFill(primaryColor);
+        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+        button.endFill();
+        button.lineStyle(1, borderColor);
+        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+        // Text label
+        text = new PIXI.Text(btn.text, {
+          fontFamily: 'Arial',
+          fontSize: 12,
+          fill: textColor,
+          fontWeight: 'bold'
+        });
+        text.anchor.set(0.5);
+        text.x = buttonWidth / 2;
+        text.y = buttonHeight / 2;
+        button.addChild(text);
+      }
       
       button.x = x;
       button.y = y;
@@ -1233,48 +1248,50 @@
       button.buttonMode = true;
       button.cursor = 'pointer';
       
-      // Hover effects
-      button.on('pointerover', () => {
-        button.clear();
-        button.beginFill(0x1b3e33);
-        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-        button.endFill();
-        button.lineStyle(1, 0x23493d);
-        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-        button.addChild(text);
-      });
-      
-      button.on('pointerout', () => {
-        button.clear();
-        button.beginFill(0x17342c);
-        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-        button.endFill();
-        button.lineStyle(1, 0x23493d);
-        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-        button.addChild(text);
-      });
-      
-        // Click handler
-        button.on('pointerdown', () => {
-          if (btn.action === 'rewards') {
-            showModal('rewards');
-          } else if (btn.action === 'info') {
-            showModal('info');
-          } else if (btn.action === 'sound') {
-            // Toggle sound
-            muted = !muted;
-            updateSoundButton();
-          }
+      // Hover effects only for non-image buttons
+      if (!btn.image) {
+        button.on('pointerover', () => {
+          button.clear();
+          button.beginFill(hoverColor);
+          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          button.endFill();
+          button.lineStyle(1, borderColor);
+          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          if (text) button.addChild(text);
         });
         
-        topbarLayer.addChild(button);
-        topbarButtons.push(button);
-        
-        // Store reference to sound button for updates
-        if (btn.action === 'sound') {
-          soundButton = button;
+        button.on('pointerout', () => {
+          button.clear();
+          button.beginFill(primaryColor);
+          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          button.endFill();
+          button.lineStyle(1, borderColor);
+          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          if (text) button.addChild(text);
+        });
+      }
+      
+      // Click handler
+      button.on('pointerdown', () => {
+        if (btn.action === 'rewards') {
+          showModal('rewards');
+        } else if (btn.action === 'info') {
+          showModal('info');
+        } else if (btn.action === 'sound') {
+          muted = !muted;
+          updateSoundButton();
         }
+      });
+      
+      topbarLayer.addChild(button);
+      topbarButtons.push(button);
+      
+      if (btn.action === 'sound') {
+        soundButton = button;
+      }
     });
+    // Ensure sound button reflects current mute state when using images
+    updateSoundButton?.();
   }
   
   function showModal(type) {
@@ -1299,88 +1316,111 @@
     const cardX = (vw - cardWidth) / 2;
     const cardY = (vh - cardHeight) / 2;
     
+    // Get colors from settings
+    const modalBgColor = parseInt(active.colors?.canvasModalBg?.replace('#', '') || '0e1f1a', 16);
+    const modalBorderColor = parseInt(active.colors?.canvasModalBorder?.replace('#', '') || '204a3e', 16);
+    const modalTextColor = parseInt(active.colors?.canvasModalText?.replace('#', '') || 'e8fff5', 16);
+    
     const card = new PIXI.Graphics();
-    card.beginFill(0x0e1f1a);
-    card.lineStyle(1, 0x204a3e);
-    card.drawRoundedRect(0, 0, cardWidth, cardHeight, 14);
-    card.endFill();
+    
+    // Use background image if available, otherwise use solid color
+    if (type === 'rewards' && active.assets?.canvasRewardsModal) {
+      // Use rewards modal background image
+      const bgSprite = new PIXI.Sprite(PIXI.Texture.from(active.assets.canvasRewardsModal));
+      bgSprite.width = cardWidth;
+      bgSprite.height = cardHeight;
+      bgSprite.x = 0;
+      bgSprite.y = 0;
+      card.addChild(bgSprite);
+    } else if (type === 'info' && active.assets?.canvasInfoModal) {
+      // Use info modal background image
+      const bgSprite = new PIXI.Sprite(PIXI.Texture.from(active.assets.canvasInfoModal));
+      bgSprite.width = cardWidth;
+      bgSprite.height = cardHeight;
+      bgSprite.x = 0;
+      bgSprite.y = 0;
+      card.addChild(bgSprite);
+    } else {
+      // Use solid color background
+      card.beginFill(modalBgColor);
+      card.lineStyle(1, modalBorderColor);
+      card.drawRoundedRect(0, 0, cardWidth, cardHeight, 14);
+      card.endFill();
+    }
+    
     card.x = cardX;
     card.y = cardY;
     modalLayer.addChild(card);
     
-    // Modal header
-    const headerHeight = 50;
-    const header = new PIXI.Graphics();
-    header.beginFill(0x0e1f1a);
-    header.lineStyle(1, 0x204a3e, 0, 0);
-    header.drawRect(0, 0, cardWidth, headerHeight);
-    header.endFill();
-    header.lineStyle(1, 0x204a3e);
-    header.moveTo(0, headerHeight);
-    header.lineTo(cardWidth, headerHeight);
-    card.addChild(header);
+    // Close button (positioned like congratulations modal)
+    const closeContainer = new PIXI.Container();
+    closeContainer.x = cardWidth - 30;
+    closeContainer.y = 30;
+    closeContainer.interactive = true;
+    closeContainer.cursor = 'pointer';
+    closeContainer.on('pointerdown', () => hideModal());
     
-    // Header text
+    const closeAsset = type === 'rewards' ? active.assets?.canvasRewardsClose : active.assets?.canvasInfoClose;
+    if (closeAsset) {
+      const sprite = new PIXI.Sprite(PIXI.Texture.from(closeAsset));
+      sprite.anchor.set(0.5);
+      sprite.width = 24; 
+      sprite.height = 24;
+      closeContainer.addChild(sprite);
+    } else {
+      const closeBtn = new PIXI.Graphics();
+      closeBtn.beginFill(0x333333);
+      closeBtn.drawCircle(0, 0, 20);
+      closeBtn.endFill();
+      closeContainer.addChild(closeBtn);
+      const closeText = new PIXI.Text('×', { fontFamily: 'Arial', fontSize: 20, fill: 0xffffff, fontWeight: 'bold' });
+      closeText.anchor.set(0.5);
+      closeContainer.addChild(closeText);
+    }
+    card.addChild(closeContainer);
+    
+    // Modal content (no header, start from top)
+    const contentY = 20;
+    const contentHeight = cardHeight - 40;
+    
+    // Add title at the top of content
     const titleText = new PIXI.Text(
       type === 'rewards' ? 'REWARDS HISTORY' : 'TERMS & CONDITIONS',
       {
         fontFamily: 'Arial',
-        fontSize: 14,
-        fill: 0xa3ffe0,
+        fontSize: 18,
+        fill: modalTextColor,
         fontWeight: 'bold'
       }
     );
     titleText.x = 20;
-    titleText.y = 15;
+    titleText.y = contentY;
     card.addChild(titleText);
     
-    // Close button
-    const closeBtn = new PIXI.Graphics();
-    closeBtn.beginFill(0x17342c);
-    closeBtn.drawRoundedRect(0, 0, 30, 25, 8);
-    closeBtn.endFill();
-    closeBtn.x = cardWidth - 40;
-    closeBtn.y = 12;
-    closeBtn.interactive = true;
-    closeBtn.buttonMode = true;
-    closeBtn.on('pointerdown', () => hideModal());
-    
-    const closeText = new PIXI.Text('×', {
-      fontFamily: 'Arial',
-      fontSize: 16,
-      fill: 0xc9ffe9,
-      fontWeight: 'bold'
-    });
-    closeText.anchor.set(0.5);
-    closeText.x = 15;
-    closeText.y = 12;
-    closeBtn.addChild(closeText);
-    card.addChild(closeBtn);
-    
-    // Modal content
-    const contentY = headerHeight + 20;
-    const contentHeight = cardHeight - headerHeight - 40;
+    // Adjust content start position
+    const actualContentY = contentY + 40;
+    const actualContentHeight = contentHeight - 40;
     
     if (type === 'rewards') {
       // Get rewards history from actual data
       const rewardsHistory = loadHistory().slice().reverse();
-      if (rewardsHistory.length === 0) {
-        // Empty state
-        const emptyText = new PIXI.Text('No prizes won yet. Spin the wheel to win prizes!', {
-          fontFamily: 'Arial',
-          fontSize: 16,
-          fill: 0xe8fff5,
-          wordWrap: true,
-          wordWrapWidth: cardWidth - 40
-        });
-        emptyText.x = 20;
-        emptyText.y = contentY;
-        card.addChild(emptyText);
-      } else {
-        // Create grid layout for rewards
-        const itemHeight = 60;
-        const itemWidth = cardWidth - 40;
-        const startY = contentY;
+        if (rewardsHistory.length === 0) {
+          // Empty state
+          const emptyText = new PIXI.Text('No prizes won yet. Spin the wheel to win prizes!', {
+            fontFamily: 'Arial',
+            fontSize: 16,
+            fill: modalTextColor,
+            wordWrap: true,
+            wordWrapWidth: cardWidth - 40
+          });
+          emptyText.x = 20;
+          emptyText.y = actualContentY;
+          card.addChild(emptyText);
+        } else {
+          // Create grid layout for rewards
+          const itemHeight = 60;
+          const itemWidth = cardWidth - 40;
+          const startY = actualContentY;
         
         rewardsHistory.slice(0, 6).forEach((reward, index) => {
           const itemY = startY + (index * (itemHeight + 12));
@@ -1445,19 +1485,19 @@
           card.addChild(prizeText);
         });
       }
-    } else if (type === 'info') {
-      // Terms content
-      const contentText = new PIXI.Text(active.terms || 'No terms specified.', {
-        fontFamily: 'Arial',
-        fontSize: 14,
-        fill: 0xe8fff5,
-        wordWrap: true,
-        wordWrapWidth: cardWidth - 40
-      });
-      contentText.x = 20;
-      contentText.y = contentY;
-      card.addChild(contentText);
-    }
+      } else if (type === 'info') {
+        // Terms content
+        const contentText = new PIXI.Text(active.terms || 'No terms specified.', {
+          fontFamily: 'Arial',
+          fontSize: 14,
+          fill: modalTextColor,
+          wordWrap: true,
+          wordWrapWidth: cardWidth - 40
+        });
+        contentText.x = 20;
+        contentText.y = actualContentY;
+        card.addChild(contentText);
+      }
   }
   
   function hideModal() {
@@ -1494,38 +1534,51 @@
     const buttonWidth = 140 * dpr;
     const buttonHeight = 50 * dpr;
     const buttonX = (vw - buttonWidth) / 2;
-    const buttonY = vh - 100 * dpr; // Position at bottom center
+    const buttonY = vh - 150 * dpr; // More space at bottom
+    
+    // Get colors from settings
+    const primaryColor = parseInt(active.colors?.canvasSpinBtn?.replace('#', '') || '24d58b', 16);
+    const hoverColor = parseInt(active.colors?.canvasSpinBtnHover?.replace('#', '') || '2be68b', 16);
+    const borderColor = parseInt(active.colors?.canvasSpinBtnBorder?.replace('#', '') || '0fb168', 16);
     
     // Create button graphics
     spinButton = new PIXI.Graphics();
     
-    // Button background with gradient effect
-    spinButton.beginFill(0x24d58b);
-    spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-    spinButton.endFill();
-    
-    // Button border
-    spinButton.lineStyle(2 * dpr, 0x0fb168);
-    spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-    
-    // Button shadow effect
-    spinButton.beginFill(0x000000, 0.2);
-    spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
-    spinButton.endFill();
-    
-    // Button text
-    const text = new PIXI.Text('SPIN', {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: 20 * dpr,
-      fill: 0xffffff,
-      fontWeight: 'bold',
-      stroke: 0x000000,
-      strokeThickness: 1 * dpr
-    });
-    text.anchor.set(0.5);
-    text.x = buttonWidth / 2;
-    text.y = buttonHeight / 2;
-    spinButton.addChild(text);
+    // Use image if available, otherwise use colors
+    if (active.assets?.canvasSpinBtn) {
+      const sprite = new PIXI.Sprite(PIXI.Texture.from(active.assets.canvasSpinBtn));
+      sprite.width = buttonWidth;
+      sprite.height = buttonHeight;
+      spinButton.addChild(sprite);
+    } else {
+      // Button background with gradient effect
+      spinButton.beginFill(primaryColor);
+      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+      spinButton.endFill();
+      
+      // Button border
+      spinButton.lineStyle(2 * dpr, borderColor);
+      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+      
+      // Button shadow effect
+      spinButton.beginFill(0x000000, 0.2);
+      spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+      spinButton.endFill();
+      
+      // Button text (only if no image)
+      const text = new PIXI.Text('SPIN', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: 20 * dpr,
+        fill: 0xffffff,
+        fontWeight: 'bold',
+        stroke: 0x000000,
+        strokeThickness: 1 * dpr
+      });
+      text.anchor.set(0.5);
+      text.x = buttonWidth / 2;
+      text.y = buttonHeight / 2;
+      spinButton.addChild(text);
+    }
     
     spinButton.x = buttonX;
     spinButton.y = buttonY;
@@ -1533,32 +1586,34 @@
     spinButton.buttonMode = true;
     spinButton.cursor = 'pointer';
     
-    // Hover effects
-    spinButton.on('pointerover', () => {
-      spinButton.clear();
-      spinButton.beginFill(0x2be68b);
-      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-      spinButton.endFill();
-      spinButton.lineStyle(2 * dpr, 0x0fb168);
-      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-      spinButton.beginFill(0x000000, 0.2);
-      spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
-      spinButton.endFill();
-      spinButton.addChild(text);
-    });
-    
-    spinButton.on('pointerout', () => {
-      spinButton.clear();
-      spinButton.beginFill(0x24d58b);
-      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-      spinButton.endFill();
-      spinButton.lineStyle(2 * dpr, 0x0fb168);
-      spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
-      spinButton.beginFill(0x000000, 0.2);
-      spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
-      spinButton.endFill();
-      spinButton.addChild(text);
-    });
+    // Hover effects (only if no image)
+    if (!active.assets?.canvasSpinBtn) {
+      spinButton.on('pointerover', () => {
+        spinButton.clear();
+        spinButton.beginFill(hoverColor);
+        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.endFill();
+        spinButton.lineStyle(2 * dpr, borderColor);
+        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.beginFill(0x000000, 0.2);
+        spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.endFill();
+        spinButton.addChild(text);
+      });
+      
+      spinButton.on('pointerout', () => {
+        spinButton.clear();
+        spinButton.beginFill(primaryColor);
+        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.endFill();
+        spinButton.lineStyle(2 * dpr, borderColor);
+        spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.beginFill(0x000000, 0.2);
+        spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
+        spinButton.endFill();
+        spinButton.addChild(text);
+      });
+    }
     
     // Click handler - call the same spin function
     spinButton.on('pointerdown', () => {
@@ -1791,7 +1846,7 @@ function generateStandaloneHTML(templateData) {
     
     let sizeMultiplier = ${wheelSize}; let autoMultiplier = 1;
     function computeAutoMultiplier(){ const vw=app.renderer.width, vh=app.renderer.height; const minEdge=Math.min(vw,vh); const targetDiameter=minEdge*0.8; autoMultiplier = targetDiameter/(CONFIG.BASE_RADIUS*2); autoMultiplier=Math.max(0.6, Math.min(1.6, autoMultiplier)); }
-    function layout(){ const vw=app.renderer.width, vh=app.renderer.height; const scale=Math.min(vw/DESIGN.w, vh/DESIGN.h); root.scale.set(scale); root.x=vw/2-(DESIGN.w*scale)/2; root.y=vh/2-(DESIGN.h*scale)/2; wheelContainer.x=DESIGN.w/2; wheelContainer.y=(vw>vh)? DESIGN.h/2-20 : DESIGN.h/2-120; drawBackground(); computeAutoMultiplier(); drawWheel(); drawLogo(); drawTopbar(); drawSpinButton(); }
+    function layout(){ const vw=app.renderer.width, vh=app.renderer.height; const scale=Math.min(vw/DESIGN.w, vh/DESIGN.h); root.scale.set(scale); root.x=vw/2-(DESIGN.w*scale)/2; root.y=vh/2-(DESIGN.h*scale)/2; wheelContainer.x=DESIGN.w/2; wheelContainer.y=(vw>vh)? DESIGN.h/2-40 : DESIGN.h/2-80; drawBackground(); computeAutoMultiplier(); drawWheel(); drawLogo(); drawTopbar(); drawSpinButton(); }
     app.renderer.on('resize', layout);
     
     const SLICES = ${JSON.stringify(slices)};
@@ -1806,13 +1861,28 @@ function generateStandaloneHTML(templateData) {
     let WHEEL_RADIUS = CONFIG.BASE_RADIUS;
     
     function drawBackground(){ bgSprite.texture=PIXI.Texture.EMPTY; if(assets.bg){ bgSprite.texture=PIXI.Texture.from(assets.bg); } const vw=app.renderer.width, vh=app.renderer.height; if(bgSprite.texture.baseTexture.valid){ const iw=bgSprite.texture.width, ih=bgSprite.texture.height; const s=Math.max(vw/iw, vh/ih); bgSprite.scale.set(s); bgSprite.x=(vw - iw*s)/2; bgSprite.y=(vh - ih*s)/2; } }
-    function drawLogo(){ logoSprite.texture=PIXI.Texture.EMPTY; if(assets.logo){ logoSprite.texture=PIXI.Texture.from(assets.logo); } logoSprite.anchor.set?.(0.5,0.5); const sc=0.5; logoSprite.scale.set(sc, sc); logoSprite.x = root.x + root.scale.x*(DESIGN.w/2); logoSprite.y = root.y + root.scale.y*(DESIGN.h/2 - 420); }
+    function drawLogo(){ 
+      logoSprite.texture=PIXI.Texture.EMPTY; 
+      if(assets.logo){ 
+        logoSprite.texture=PIXI.Texture.from(assets.logo); 
+      } 
+      logoSprite.anchor.set?.(0.5,0.5); 
+      const sc=0.4; // Slightly larger scale for better visibility
+      logoSprite.scale.set(sc, sc); 
+      // Position logo with more space above the wheel
+      logoSprite.x = wheelContainer.x; // Center horizontally with wheel
+      logoSprite.y = wheelContainer.y - WHEEL_RADIUS - 140; // More space above the wheel
+    }
     
     function drawWheel(resetRotation=false){
       WHEEL_RADIUS = CONFIG.BASE_RADIUS * sizeMultiplier * autoMultiplier;
       if(resetRotation) wheel.rotation = 0;
       base.clear(); rim.clear(); wheel.removeChildren(); labels.length = 0;
       dots.clear(); hub.clear(); pointer.clear(); hubLayer.removeChildren();
+      
+      // Update logo position when wheel is redrawn
+      drawLogo();
+      
       if(wheelImageSprite.parent !== wheel){ wheelImageSprite.parent?.removeChild(wheelImageSprite); wheel.addChildAt(wheelImageSprite, 0); }
       wheelImageSprite.texture = PIXI.Texture.EMPTY;
       base.beginFill(0x071a15).drawCircle(0,0,WHEEL_RADIUS+28).endFill(); base.alpha = 0.9;
@@ -2127,66 +2197,84 @@ function generateStandaloneHTML(templateData) {
       const modalTextColor = parseInt(active.colors?.canvasModalText?.replace('#', '') || 'e8fff5', 16);
       
       const card = new PIXI.Graphics();
-      card.beginFill(modalBgColor);
-      card.lineStyle(1, modalBorderColor);
-      card.drawRoundedRect(0, 0, cardWidth, cardHeight, 14);
-      card.endFill();
+      
+      // Use background image if available, otherwise use solid color
+      if (type === 'rewards' && active.assets?.canvasRewardsModal) {
+        // Use rewards modal background image - covers entire modal including header
+        const bgSprite = new PIXI.Sprite(PIXI.Texture.from(active.assets.canvasRewardsModal));
+        bgSprite.width = cardWidth;
+        bgSprite.height = cardHeight;
+        bgSprite.x = 0;
+        bgSprite.y = 0;
+        card.addChild(bgSprite);
+      } else if (type === 'info' && active.assets?.canvasInfoModal) {
+        // Use info modal background image - covers entire modal including header
+        const bgSprite = new PIXI.Sprite(PIXI.Texture.from(active.assets.canvasInfoModal));
+        bgSprite.width = cardWidth;
+        bgSprite.height = cardHeight;
+        bgSprite.x = 0;
+        bgSprite.y = 0;
+        card.addChild(bgSprite);
+      } else {
+        // Use solid color background
+        card.beginFill(modalBgColor);
+        card.lineStyle(1, modalBorderColor);
+        card.drawRoundedRect(0, 0, cardWidth, cardHeight, 14);
+        card.endFill();
+      }
+      
       card.x = cardX;
       card.y = cardY;
       modalLayer.addChild(card);
       
-      // Modal header
-      const headerHeight = 50;
-      const header = new PIXI.Graphics();
-      header.beginFill(modalBgColor);
-      header.lineStyle(1, modalBorderColor, 0, 0);
-      header.drawRect(0, 0, cardWidth, headerHeight);
-      header.endFill();
-      header.lineStyle(1, modalBorderColor);
-      header.moveTo(0, headerHeight);
-      header.lineTo(cardWidth, headerHeight);
-      card.addChild(header);
+      // Close button (positioned like congratulations modal)
+      const closeContainer = new PIXI.Container();
+      closeContainer.x = cardWidth - 30;
+      closeContainer.y = 30;
+      closeContainer.interactive = true;
+      closeContainer.cursor = 'pointer';
+      closeContainer.on('pointerdown', () => hideModal());
       
-      // Header text
+      const closeAsset = type === 'rewards' ? active.assets?.canvasRewardsClose : active.assets?.canvasInfoClose;
+      if (closeAsset) {
+        const sprite = new PIXI.Sprite(PIXI.Texture.from(closeAsset));
+        sprite.anchor.set(0.5);
+        sprite.width = 24; 
+        sprite.height = 24;
+        closeContainer.addChild(sprite);
+      } else {
+        const closeBtn = new PIXI.Graphics();
+        closeBtn.beginFill(0x333333);
+        closeBtn.drawCircle(0, 0, 20);
+        closeBtn.endFill();
+        closeContainer.addChild(closeBtn);
+        const closeText = new PIXI.Text('×', { fontFamily: 'Arial', fontSize: 20, fill: 0xffffff, fontWeight: 'bold' });
+        closeText.anchor.set(0.5);
+        closeContainer.addChild(closeText);
+      }
+      card.addChild(closeContainer);
+      
+      // Modal content (no header, start from top)
+      const contentY = 20;
+      const contentHeight = cardHeight - 40;
+      
+      // Add title at the top of content
       const titleText = new PIXI.Text(
         type === 'rewards' ? 'REWARDS HISTORY' : 'TERMS & CONDITIONS',
         {
           fontFamily: 'Arial',
-          fontSize: 14,
+          fontSize: 18,
           fill: modalTextColor,
           fontWeight: 'bold'
         }
       );
       titleText.x = 20;
-      titleText.y = 15;
+      titleText.y = contentY;
       card.addChild(titleText);
       
-      // Close button
-      const closeBtn = new PIXI.Graphics();
-      closeBtn.beginFill(0x17342c);
-      closeBtn.drawRoundedRect(0, 0, 30, 25, 8);
-      closeBtn.endFill();
-      closeBtn.x = cardWidth - 40;
-      closeBtn.y = 12;
-      closeBtn.interactive = true;
-      closeBtn.buttonMode = true;
-      closeBtn.on('pointerdown', () => hideModal());
-      
-      const closeText = new PIXI.Text('×', {
-        fontFamily: 'Arial',
-        fontSize: 16,
-        fill: 0xc9ffe9,
-        fontWeight: 'bold'
-      });
-      closeText.anchor.set(0.5);
-      closeText.x = 15;
-      closeText.y = 12;
-      closeBtn.addChild(closeText);
-      card.addChild(closeBtn);
-      
-      // Modal content
-      const contentY = headerHeight + 20;
-      const contentHeight = cardHeight - headerHeight - 40;
+      // Adjust content start position
+      const actualContentY = contentY + 40;
+      const actualContentHeight = contentHeight - 40;
       
       if (type === 'rewards') {
         // Get rewards history from actual data
@@ -2201,13 +2289,13 @@ function generateStandaloneHTML(templateData) {
             wordWrapWidth: cardWidth - 40
           });
           emptyText.x = 20;
-          emptyText.y = contentY;
+          emptyText.y = actualContentY;
           card.addChild(emptyText);
         } else {
           // Create grid layout for rewards
           const itemHeight = 60;
           const itemWidth = cardWidth - 40;
-          const startY = contentY;
+          const startY = actualContentY;
           
           rewardsHistory.slice(0, 6).forEach((reward, index) => {
             const itemY = startY + (index * (itemHeight + 12));
@@ -2314,15 +2402,28 @@ function generateStandaloneHTML(templateData) {
       const cardY = (app.screen.height - cardHeight) / 2;
       
       const card = new PIXI.Graphics();
-      card.beginFill(0x1a1a1a);
-      card.drawRoundedRect(0, 0, cardWidth, cardHeight, 20);
-      card.endFill();
       
-      // Add gradient border effect
-      const border = new PIXI.Graphics();
-      border.lineStyle(3, 0x8B5CF6);
-      border.drawRoundedRect(0, 0, cardWidth, cardHeight, 20);
-      card.addChild(border);
+      // Use congratulations modal background image if available, otherwise use solid color
+      if (active.assets?.canvasCongratsModal) {
+        // Use congratulations modal background image
+        const bgSprite = new PIXI.Sprite(PIXI.Texture.from(active.assets.canvasCongratsModal));
+        bgSprite.width = cardWidth;
+        bgSprite.height = cardHeight;
+        bgSprite.x = 0;
+        bgSprite.y = 0;
+        card.addChild(bgSprite);
+      } else {
+        // Use solid color background
+        card.beginFill(0x1a1a1a);
+        card.drawRoundedRect(0, 0, cardWidth, cardHeight, 20);
+        card.endFill();
+        
+        // Add gradient border effect
+        const border = new PIXI.Graphics();
+        border.lineStyle(3, 0x8B5CF6);
+        border.drawRoundedRect(0, 0, cardWidth, cardHeight, 20);
+        card.addChild(border);
+      }
       
       card.x = cardX;
       card.y = cardY;
@@ -2488,7 +2589,7 @@ function generateStandaloneHTML(templateData) {
       const buttonWidth = 140 * dpr;
       const buttonHeight = 50 * dpr;
       const buttonX = (vw - buttonWidth) / 2;
-      const buttonY = vh - 100 * dpr; // Position at bottom center
+      const buttonY = vh - 150 * dpr; // More space at bottom
       
       // Get colors from settings
       const primaryColor = parseInt(active.colors?.canvasSpinBtn?.replace('#', '') || '24d58b', 16);

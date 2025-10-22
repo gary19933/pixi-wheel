@@ -74,99 +74,7 @@
         </div>
       </div>
 
-      <h3>Spin Button</h3>
-      <div class="element-section">
-        <div class="row">
-          <label>Type</label>
-          <select id="spinBtnType">
-            <option value="color">Solid Color</option>
-            <option value="gradient">Gradient</option>
-            <option value="image">Image</option>
-          </select>
-        </div>
-        <div class="row" id="spinBtnColorRow">
-          <label>Color</label>
-          <input id="spinBtnColor" type="color" value="#24d58b">
-        </div>
-        <div class="row" id="spinBtnGradientRow" style="display:none">
-          <label>Gradient</label>
-          <div class="gradient-controls">
-            <input id="spinBtnGradient1" type="color" value="#24d58b">
-            <input id="spinBtnGradient2" type="color" value="#0fb168">
-            <select id="spinBtnGradientDirection">
-              <option value="to bottom">Top to Bottom</option>
-              <option value="to right">Left to Right</option>
-              <option value="to bottom right">Diagonal</option>
-              <option value="radial">Radial</option>
-            </select>
-          </div>
-        </div>
-        <div class="row" id="spinBtnImageRow" style="display:none">
-          <label>Image</label>
-          <input id="spinBtnFile" type="file" accept="image/*">
-          <button id="spinBtnClear" class="btn-sm btn-ghost">Clear</button>
-        </div>
-      </div>
 
-      <h3>Rewards</h3>
-      <div class="element-section">
-        <div class="sublabel">Rewards Button</div>
-        <div class="row">
-          <label>Button Image</label>
-          <input id="rewardsBtnFile" type="file" accept="image/*">
-          <button id="rewardsBtnClear" class="btn-sm btn-ghost">Clear</button>
-        </div>
-      </div>
-      
-      <div class="element-section">
-        <div class="row">
-          <label>Modal Background</label>
-          <input id="rewardsModalFile" type="file" accept="image/*">
-          <button id="rewardsModalClear" class="btn-sm btn-ghost">Clear</button>
-        </div>
-        <div class="row">
-          <label>Close Button</label>
-          <input id="rewardsCloseFile" type="file" accept="image/*">
-          <button id="rewardsCloseClear" class="btn-sm btn-ghost">Clear</button>
-        </div>
-      </div>
-
-      <h3>Info</h3>
-      <div class="element-section">
-        <div class="sublabel">Info Button</div>
-        <div class="row">
-          <label>Button Image</label>
-          <input id="infoBtnFile" type="file" accept="image/*">
-          <button id="infoBtnClear" class="btn-sm btn-ghost">Clear</button>
-        </div>
-      </div>
-      
-      <div class="element-section">
-        <div class="row">
-          <label>Modal Background</label>
-          <input id="infoModalFile" type="file" accept="image/*">
-          <button id="infoModalClear" class="btn-sm btn-ghost">Clear</button>
-        </div>
-        <div class="row">
-          <label>Close Button</label>
-          <input id="infoCloseFile" type="file" accept="image/*">
-          <button id="infoCloseClear" class="btn-sm btn-ghost">Clear</button>
-        </div>
-      </div>
-
-      <h3>Sound Button</h3>
-      <div class="element-section">
-        <div class="row">
-          <label>Unmute Button</label>
-          <input id="soundUnmuteFile" type="file" accept="image/*">
-          <button id="soundUnmuteClear" class="btn-sm btn-ghost">Clear</button>
-        </div>
-        <div class="row">
-          <label>Mute Button</label>
-          <input id="soundMuteFile" type="file" accept="image/*">
-          <button id="soundMuteClear" class="btn-sm btn-ghost">Clear</button>
-        </div>
-      </div>
       
       <h3>Wheel &amp; API</h3>
       <div class="row row-wheelapi">
@@ -190,17 +98,6 @@
       <div class="row" id="claimUrlRow" style="display: none;">
         <label>Redirect URL</label>
         <input type="url" id="claimUrl" placeholder="https://example.com/claim">
-      </div>
-      
-      <h3>Prize Control</h3>
-      <div class="element-section">
-        <div class="row">
-          <label>Guaranteed Prize</label>
-          <select id="guaranteedPrize">
-            <option value="">Random Prize (Normal)</option>
-          </select>
-        </div>
-        <div class="subtle">🎯 Set a specific prize that the player will always win. Useful for testing or special events!</div>
       </div>
       
       <h3>Wheel Image</h3>
@@ -255,14 +152,29 @@
           <button id="canvasRewardsModalClear" class="btn-sm btn-ghost">Clear</button>
         </div>
         <div class="row">
+          <label>Rewards Close Button</label>
+          <input id="canvasRewardsCloseFile" type="file" accept="image/*">
+          <button id="canvasRewardsCloseClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="row">
           <label>Info Modal</label>
           <input id="canvasInfoModalFile" type="file" accept="image/*">
           <button id="canvasInfoModalClear" class="btn-sm btn-ghost">Clear</button>
         </div>
         <div class="row">
+          <label>Info Close Button</label>
+          <input id="canvasInfoCloseFile" type="file" accept="image/*">
+          <button id="canvasInfoCloseClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="row">
           <label>Congratulations Modal</label>
           <input id="canvasCongratsModalFile" type="file" accept="image/*">
           <button id="canvasCongratsModalClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="row">
+          <label>Congratulations Close Button</label>
+          <input id="canvasCongratsCloseFile" type="file" accept="image/*">
+          <button id="canvasCongratsCloseClear" class="btn-sm btn-ghost">Clear</button>
         </div>
       </div>
 
@@ -328,6 +240,17 @@
         <select id="forceSelect"><option value="">Force Prize (QA)</option></select>
         <input id="quickAdd" type="text" placeholder="Quick add: label | weight | color" />
         <button id="addBtn" class="btn-sm">Add</button>
+      </div>
+
+      <h3>Prize Control</h3>
+      <div class="element-section">
+        <div class="row">
+          <label>Guaranteed Prize</label>
+          <select id="guaranteedPrize">
+            <option value="">Random Prize (Normal)</option>
+          </select>
+        </div>
+        <div class="subtle">🎯 Set a specific prize that the player will always win. Useful for testing or special events!</div>
       </div>
 
       <h3>Terms &amp; Conditions</h3>
