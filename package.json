@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "services:install": "cd services/gateway && npm install && cd ../gameplay && npm install && cd ../probability && npm install && cd ../system && npm install",
+    "services:check": "node services/check-ports.js",
+    "services:kill": "node services/kill-ports.js",
+    "services:start": "node services/start-all.js"
   },
   "devDependencies": {
     "vite": "^7.1.7"

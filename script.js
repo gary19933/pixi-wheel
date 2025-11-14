@@ -1,7 +1,15 @@
 (async function(){
   try{
   // ---- Config ---------------------------------------------------------------
-  const CONFIG = { API_ENDPOINT: '/api/claim', ENABLE_SFX: true, BASE_RADIUS: 400, HUB_RADIUS: 80 };
+  // Microservice Gateway URL - change this if your gateway runs on a different port/domain
+  const MICROSERVICE_GATEWAY = 'http://localhost:3000';
+  const CONFIG = { 
+    API_ENDPOINT: `${MICROSERVICE_GATEWAY}/api/gameplay/claim`, 
+    USE_MICROSERVICE_FOR_SPIN: false, // Set to true to use microservice for spin results (server-side)
+    ENABLE_SFX: true, 
+    BASE_RADIUS: 400, 
+    HUB_RADIUS: 80 
+  };
 
   // ---- Pixi app ------------------------------------------------------------
   const app = new PIXI.Application({ resizeTo: document.getElementById('game'), backgroundAlpha: 0, antialias: true, autoDensity: true, powerPreference: 'high-performance' });
@@ -38,6 +46,26 @@
   function loadTemplates(){ try{ const arr=JSON.parse(localStorage.getItem(LS_KEY)||'[]'); if(Array.isArray(arr)&&arr.length) return arr; }catch{} const seed=[defaultTemplate()]; localStorage.setItem(LS_KEY, JSON.stringify(seed)); return seed; }
   function saveTemplates(){ localStorage.setItem(LS_KEY, JSON.stringify(templates)); }
   let templates = loadTemplates(); let activeIndex=0; let active=templates[activeIndex];
+  
+  // Session management for microservice
+  let gameSession = null;
+  async function getOrCreateSession() {
+    if (!gameSession) {
+      try {
+        const response = await fetch(`${MICROSERVICE_GATEWAY}/api/gameplay/session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (response.ok) {
+          gameSession = await response.json();
+          console.log('Game session created:', gameSession.id);
+        }
+      } catch (err) {
+        console.warn('Failed to create session, continuing without session tracking', err);
+      }
+    }
+    return gameSession;
+  }
 
   // ---- Prize parsing -------------------------------------------------------
   function normalizeColor(c){ if(typeof c==='number') return c; if(typeof c==='string'){ if(c.startsWith('#')) return parseInt(c.slice(1),16); if(/^0x/i.test(c)) return parseInt(c,16); return 0x25c77a; } return 0x25c77a; }
@@ -258,6 +286,14 @@
 
   // Prize control
   const guaranteedPrize = document.getElementById('guaranteedPrize');
+  const guaranteedPrizeEnabled = document.getElementById('guaranteedPrizeEnabled');
+  const guaranteedSpinCount = document.getElementById('guaranteedSpinCount');
+  const guaranteedSpinCountRow = document.getElementById('guaranteedSpinCountRow');
+  const guaranteedPrizeSequenceRow = document.getElementById('guaranteedPrizeSequenceRow');
+  const guaranteedPrizeSequence = document.getElementById('guaranteedPrizeSequence');
+  
+  // Track spin count for guaranteed prize feature
+  let spinCount = 0;
 
   // Canvas UI Image event handlers
   canvasRewardsBtnFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.canvasRewardsBtn=await fileToDataURL(f); saveTemplates(); drawTopbar(); showToast('🖼️ Canvas Rewards button image set'); });
@@ -307,25 +343,242 @@
     if (!active.settings) {
       active.settings = {};
     }
-    active.settings.guaranteedPrize = guaranteedPrize.value; 
+    // Normalize empty string to null/undefined for random mode
+    const newGuaranteedPrize = guaranteedPrize.value && guaranteedPrize.value.trim() ? guaranteedPrize.value : null;
+    
+    // Clear any sequence selections that match the new guaranteed prize
+    if (active.settings.guaranteedPrizeSequence && newGuaranteedPrize) {
+      active.settings.guaranteedPrizeSequence = active.settings.guaranteedPrizeSequence.map(seqPrize => 
+        seqPrize === newGuaranteedPrize ? null : seqPrize
+      );
+    }
+    
+    active.settings.guaranteedPrize = newGuaranteedPrize;
+    
+    // Enable/disable the "Enable Guaranteed Prize on Nth Spin" checkbox based on whether a prize is selected
+    if (!newGuaranteedPrize) {
+      // No guaranteed prize selected - disable and uncheck the checkbox
+      guaranteedPrizeEnabled.disabled = true;
+      guaranteedPrizeEnabled.checked = false;
+      active.settings.guaranteedPrizeEnabled = false;
+      guaranteedSpinCountRow.style.display = 'none';
+      guaranteedPrizeSequenceRow.style.display = 'none';
+    } else {
+      // Guaranteed prize selected - enable the checkbox
+      guaranteedPrizeEnabled.disabled = false;
+    }
+    
+    // Regenerate prize sequence boxes if enabled (to update available options)
+    if (guaranteedPrizeEnabled.checked && newGuaranteedPrize) {
+      generatePrizeSequenceBoxes();
+    }
+    
     saveTemplates(); 
-    if (guaranteedPrize.value) {
-      const prizeLabel = SLICES.find(s => s.id === guaranteedPrize.value)?.label;
+    if (active.settings.guaranteedPrize) {
+      const prizeLabel = SLICES.find(s => s.id === active.settings.guaranteedPrize)?.label;
       showToast('🎯 Guaranteed prize set: ' + prizeLabel);
     } else {
       showToast('🎲 Random prizes enabled');
     }
   });
 
+  // Enhanced guaranteed prize settings
+  guaranteedPrizeEnabled.addEventListener('change', ()=>{ 
+    if (!active.settings) {
+      active.settings = {};
+    }
+    active.settings.guaranteedPrizeEnabled = guaranteedPrizeEnabled.checked;
+    guaranteedSpinCountRow.style.display = guaranteedPrizeEnabled.checked ? 'flex' : 'none';
+    
+    // Generate prize sequence boxes when enabled
+    if (guaranteedPrizeEnabled.checked) {
+      generatePrizeSequenceBoxes();
+      showToast('✅ Guaranteed prize on Nth spin enabled');
+    } else {
+      guaranteedPrizeSequenceRow.style.display = 'none';
+      showToast('🎲 Guaranteed prize every spin (if set)');
+    }
+    saveTemplates();
+  });
+
+  guaranteedSpinCount.addEventListener('change', ()=>{ 
+    if (!active.settings) {
+      active.settings = {};
+    }
+    const maxSpins = SLICES.length; // Maximum is total number of prizes
+    const count = parseInt(guaranteedSpinCount.value) || 5;
+    // Enforce minimum of 2 and maximum of total prizes
+    active.settings.guaranteedSpinCount = Math.max(2, Math.min(maxSpins, count));
+    guaranteedSpinCount.value = active.settings.guaranteedSpinCount;
+    
+    // Update max attribute dynamically
+    guaranteedSpinCount.max = maxSpins;
+    
+    // Generate prize sequence select boxes
+    generatePrizeSequenceBoxes();
+    saveTemplates();
+  });
+
+  // Function to generate prize sequence select boxes
+  function generatePrizeSequenceBoxes() {
+    if (!guaranteedPrizeEnabled.checked) {
+      guaranteedPrizeSequenceRow.style.display = 'none';
+      return;
+    }
+
+    const maxSpins = SLICES.length; // Maximum is total number of prizes
+    const count = parseInt(guaranteedSpinCount.value) || 5;
+    
+    // Enforce limits: minimum 2, maximum total prizes
+    const validCount = Math.max(2, Math.min(maxSpins, count));
+    if (validCount !== count) {
+      guaranteedSpinCount.value = validCount;
+      if (active.settings) {
+        active.settings.guaranteedSpinCount = validCount;
+      }
+    }
+    
+    // Update max attribute
+    guaranteedSpinCount.max = maxSpins;
+    
+    guaranteedPrizeSequence.innerHTML = '';
+    
+    // Initialize sequence array if it doesn't exist or ensure it's the right length
+    if (!active.settings) {
+      active.settings = {};
+    }
+    if (!active.settings.guaranteedPrizeSequence) {
+      active.settings.guaranteedPrizeSequence = [];
+    }
+    
+    // Ensure array is the right length (validCount - 1)
+    while (active.settings.guaranteedPrizeSequence.length < validCount - 1) {
+      active.settings.guaranteedPrizeSequence.push(null);
+    }
+    // Trim array if it's too long
+    if (active.settings.guaranteedPrizeSequence.length > validCount - 1) {
+      active.settings.guaranteedPrizeSequence = active.settings.guaranteedPrizeSequence.slice(0, validCount - 1);
+    }
+    
+    const finalCount = validCount;
+    
+    // Create select boxes for spins 1 to (finalCount-1)
+    for (let i = 1; i < finalCount; i++) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.marginBottom = '8px';
+      
+      const label = document.createElement('label');
+      label.textContent = `Spin ${i}:`;
+      label.style.minWidth = '80px';
+      
+      const select = document.createElement('select');
+      select.id = `guaranteedPrizeSeq${i}`;
+      
+      // Filter out the guaranteed prize from the options
+      const guaranteedPrizeId = active.settings?.guaranteedPrize;
+      const availablePrizes = SLICES.filter(slice => 
+        !guaranteedPrizeId || slice.id !== guaranteedPrizeId
+      );
+      
+      select.innerHTML = '<option value="">Random Prize</option>' + 
+        availablePrizes.map(slice => `<option value="${slice.id}">${slice.label}</option>`).join('');
+      
+      // Set saved value if exists
+      if (active.settings.guaranteedPrizeSequence[i - 1]) {
+        select.value = active.settings.guaranteedPrizeSequence[i - 1];
+      }
+      
+      // Add change event listener
+      select.addEventListener('change', () => {
+        if (!active.settings) {
+          active.settings = {};
+        }
+        if (!active.settings.guaranteedPrizeSequence) {
+          active.settings.guaranteedPrizeSequence = [];
+        }
+        // Ensure array is long enough
+        while (active.settings.guaranteedPrizeSequence.length < i) {
+          active.settings.guaranteedPrizeSequence.push(null);
+        }
+        active.settings.guaranteedPrizeSequence[i - 1] = select.value && select.value.trim() ? select.value : null;
+        saveTemplates();
+        console.log('Prize sequence updated:', active.settings.guaranteedPrizeSequence);
+      });
+      
+      row.appendChild(label);
+      row.appendChild(select);
+      guaranteedPrizeSequence.appendChild(row);
+    }
+    
+    guaranteedPrizeSequenceRow.style.display = 'block';
+  }
+
 
   // Prize area ---------------------------------------------------------------
-  applyBtn.addEventListener('click', ()=>{
+  // Sync frontend prizes to backend
+  async function syncPrizesToBackend() {
+    try {
+      const prizes = SLICES.map(s => ({ 
+        id: s.id, 
+        label: s.label, 
+        weight: s.weight, 
+        color: s.color 
+      }));
+      
+      const config = {
+        prizes: prizes,
+        guaranteedPrize: active.settings?.guaranteedPrize || null,
+        guaranteedPrizeEnabled: active.settings?.guaranteedPrizeEnabled || false,
+        guaranteedSpinCount: active.settings?.guaranteedSpinCount || 5,
+        guaranteedPrizeSequence: active.settings?.guaranteedPrizeSequence || []
+      };
+      
+      const response = await fetch(`${MICROSERVICE_GATEWAY}/api/gameplay/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      
+      if (response.ok) {
+        console.log('✅ Prizes synced to backend:', prizes.length, 'prizes');
+        return true;
+      } else {
+        console.warn('⚠️ Failed to sync prizes to backend:', response.status);
+        return false;
+      }
+    } catch (err) {
+      console.warn('⚠️ Error syncing prizes to backend:', err);
+      return false;
+    }
+  }
+
+  applyBtn.addEventListener('click', async ()=>{
   try{
     const next=parseFromText(configText.value);
     SLICES=next; active.prizesText=configText.value; active.terms = termsText.value.trim(); saveTemplates();
     refreshTemplateUI();
+    // Regenerate prize sequence boxes if enabled (to update with new prizes and max value)
+    if (guaranteedPrizeEnabled.checked) {
+      // Update max value based on new prize count
+      const maxSpins = SLICES.length;
+      const currentCount = parseInt(guaranteedSpinCount.value) || 5;
+      const validCount = Math.max(2, Math.min(maxSpins, currentCount));
+      if (validCount !== currentCount) {
+        guaranteedSpinCount.value = validCount;
+        if (active.settings) {
+          active.settings.guaranteedSpinCount = validCount;
+        }
+      }
+      guaranteedSpinCount.max = maxSpins;
+      generatePrizeSequenceBoxes();
+    }
     drawWheel(true);
-    showToast('✅ Prizes applied');
+    
+    // Auto-sync prizes to backend so Postman can use them
+    await syncPrizesToBackend();
+    
+    showToast('✅ Prizes applied and synced to backend');
   }catch(err){ showToast('❌ '+err.message); }
 });
   addBtn.addEventListener('click', ()=>{ const v=(quickAdd.value||'').trim(); if(!v) return; configText.value=(configText.value.trim()+"\n"+v).trim(); quickAdd.value=''; applyBtn.click(); });
@@ -397,6 +650,17 @@
       
       // Reset guaranteed prize
       guaranteedPrize.value = '';
+      guaranteedPrizeEnabled.disabled = true;
+      guaranteedPrizeEnabled.checked = false;
+      guaranteedSpinCount.value = 5;
+      guaranteedSpinCountRow.style.display = 'none';
+      guaranteedPrizeSequenceRow.style.display = 'none';
+      if (active.settings) {
+        active.settings.guaranteedPrize = ''; // Reset guaranteed prize to empty
+        active.settings.guaranteedPrizeEnabled = false;
+        active.settings.guaranteedSpinCount = 5;
+        active.settings.guaranteedPrizeSequence = [];
+      }
       
       // Clear all file inputs so re-uploading same file triggers change
       [
@@ -416,30 +680,21 @@
         canvasCongratsCloseFile
       ].forEach((inp)=>{ if(inp) inp.value=''; });
 
-      // Refresh
-      refreshTemplateUI();
-      drawBackground();
-      drawWheel(true);
-      drawTopbar();
-      updateSoundButton?.();
-      drawSpinButton();
-      showToast('🔄 Reset to default settings');
-      
       // Reset wheel size
       sizeRange.value = '1.6';
       sizeMultiplier = 1.6;
       
-      // Reset claim button settings
-      active.settings = defaultTpl.settings;
-      claimAction.value = 'modal';
-      claimUrl.value = '';
-      claimUrlRow.style.display = 'none';
+      // Reset spin count for guaranteed prize logic (important!)
+      spinCount = 0;
       
-      // Clear file inputs
-      bgFile.value = '';
-      logoFile.value = '';
-      wheelFile.value = '';
-      spinFile.value = '';
+      // Ensure guaranteed prize is fully reset (fix for broken logic after reset)
+      // This must be done AFTER active.settings is set from defaultTpl
+      if (active.settings) {
+        active.settings.guaranteedPrize = '';
+        active.settings.guaranteedPrizeEnabled = false;
+        active.settings.guaranteedSpinCount = 5;
+        active.settings.guaranteedPrizeSequence = [];
+      }
       
       // Save and refresh
       saveTemplates();
@@ -448,8 +703,14 @@
       drawBackground();
       drawWheel(true);
       drawLogo();
+      drawTopbar();
+      updateSoundButton?.();
+      drawSpinButton();
       updateBackground();
       updateButton();
+      
+      // Sync reset config to backend
+      syncPrizesToBackend();
       
       showToast('🔄 Reset to default settings');
     }
@@ -656,7 +917,25 @@
   // Picker + angles ----------------------------------------------------------
   const TWO_PI = Math.PI * 2;
   const globalSliceAngle = ()=> TWO_PI / SLICES.length;
-  function pickWeighted(items){ const forceIdx=forceSelect.value!==''? parseInt(forceSelect.value,10):null; if(Number.isInteger(forceIdx)&&items[forceIdx]) return items[forceIdx]; const total=items.reduce((s,x)=>s+(x.weight??1),0); let r=Math.random()*total; for(const it of items){ r-=(it.weight??1); if(r<=0) return it; } return items[items.length-1]; }
+  function pickWeighted(items, excludeId = null){ 
+    const forceIdx=forceSelect.value!==''? parseInt(forceSelect.value,10):null; 
+    if(Number.isInteger(forceIdx)&&items[forceIdx]) return items[forceIdx]; 
+    
+    // Filter out excluded prize if specified
+    const filteredItems = excludeId ? items.filter(item => item.id !== excludeId) : items;
+    if (filteredItems.length === 0) {
+      // If all items are excluded, fallback to all items
+      return items[items.length - 1];
+    }
+    
+    const total=filteredItems.reduce((s,x)=>s+(x.weight??1),0); 
+    let r=Math.random()*total; 
+    for(const it of filteredItems){ 
+      r-=(it.weight??1); 
+      if(r<=0) return it; 
+    } 
+    return filteredItems[filteredItems.length-1]; 
+  }
   function centerAngleForIndex(idx){
     // Angle that makes the pointer (fixed at the top) land at the *center* of slice idx
     // Derivation: rotate wheel by theta so local center angle α maps to -PI/2 (top).
@@ -743,6 +1022,7 @@
 
       if(p>=1){
         spinning=false;
+        updateSpinButtonState(); // Re-enable button
         // Snap to the precomputed exact end angle of the chosen slice
         wheel.rotation = rotEnd;
         onSpinComplete();
@@ -783,34 +1063,150 @@
   // Modal close handlers
   document.querySelectorAll('.modal-close').forEach(btn=> btn.addEventListener('click', (e)=> closeModal(e.target.getAttribute('data-close'))));
 
-   function spin(){
+   async function spin(){
      if(spinning) return;
+     
+     // Set spinning state immediately for instant UI feedback
+     spinning = true;
+     updateSpinButtonState();
+     
      if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
      
-     // Check for guaranteed prize first
+     // Create/get session for microservice tracking (non-blocking)
+     getOrCreateSession().catch(err => console.warn('Session creation failed:', err));
+     
+     // Increment spin count
+     spinCount++;
+     
+     // Determine which prize to use this spin
+     let useGuaranteedPrize = false;
+     let useSequencePrize = null;
+     const hasGuaranteedPrize = active.settings?.guaranteedPrize && typeof active.settings.guaranteedPrize === 'string' && active.settings.guaranteedPrize.trim();
+     
+     if (hasGuaranteedPrize) {
+       if (active.settings?.guaranteedPrizeEnabled) {
+         // Enhanced mode: use sequence or guaranteed prize on Nth spin
+         const targetSpin = active.settings.guaranteedSpinCount || 5;
+         const positionInCycle = ((spinCount - 1) % targetSpin);
+         
+         // Check if we have a sequence defined with valid values
+         const sequence = active.settings.guaranteedPrizeSequence;
+         const hasSequence = sequence && 
+                            Array.isArray(sequence) &&
+                            sequence.length > 0 &&
+                            sequence.some(v => v && typeof v === 'string' && v.trim());
+         
+         if (hasSequence) {
+           // Use sequence prize for positions 0 to (targetSpin-2)
+           if (positionInCycle < targetSpin - 1) {
+             const sequencePrizeId = sequence[positionInCycle];
+             if (sequencePrizeId && typeof sequencePrizeId === 'string' && sequencePrizeId.trim()) {
+               useSequencePrize = sequencePrizeId;
+               console.log(`Spin ${spinCount}: Using sequence prize at position ${positionInCycle}: ${useSequencePrize}`);
+             } else {
+               // No prize set for this position, use random
+               useSequencePrize = null;
+               console.log(`Spin ${spinCount}: No sequence prize at position ${positionInCycle}, using random`);
+             }
+           } else {
+             // Last position in cycle: use guaranteed prize
+             useGuaranteedPrize = true;
+             console.log(`Spin ${spinCount}: Using guaranteed prize (position ${positionInCycle} is last in cycle)`);
+           }
+         } else {
+           // No sequence defined: use guaranteed prize only on Nth spin
+           useGuaranteedPrize = (spinCount % targetSpin === 0);
+           console.log(`Spin ${spinCount}: No sequence defined, guaranteed prize on spin ${spinCount % targetSpin === 0 ? 'YES' : 'NO'}`);
+         }
+       } else {
+         // Original mode: every spin
+         useGuaranteedPrize = true;
+       }
+     }
+     
      let chosen;
-     if (active.settings && active.settings.guaranteedPrize) {
-       // Use guaranteed prize
-       chosen = SLICES.find(slice => slice.id === active.settings.guaranteedPrize);
-       if (!chosen) {
-         // Fallback to random if guaranteed prize not found
-         chosen = pickWeighted(SLICES);
+     
+     // Use microservice for spin if enabled
+     if (CONFIG.USE_MICROSERVICE_FOR_SPIN) {
+       try {
+         // Filter out guaranteed prize from prizes array if in enhanced mode and doing random selection
+         const guaranteedPrizeId = active.settings?.guaranteedPrize;
+         const excludeGuaranteed = active.settings?.guaranteedPrizeEnabled && guaranteedPrizeId && !useSequencePrize && !useGuaranteedPrize;
+         const prizesToSend = excludeGuaranteed 
+           ? SLICES.filter(s => s.id !== guaranteedPrizeId).map(s => ({ id: s.id, label: s.label, weight: s.weight, color: s.color }))
+           : SLICES.map(s => ({ id: s.id, label: s.label, weight: s.weight, color: s.color }));
+         
+         const response = await fetch(`${MICROSERVICE_GATEWAY}/api/gameplay/spin`, {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+             sessionId: gameSession?.id,
+             prizes: prizesToSend,
+             guaranteedPrize: useSequencePrize ? useSequencePrize : (useGuaranteedPrize ? active.settings.guaranteedPrize : null)
+           })
+         });
+         if (response.ok) {
+           const result = await response.json();
+           chosen = SLICES.find(s => s.id === result.prize.id) || result.prize;
+           spin._result = chosen;
+           spin._animation = result.animation; // Use server-provided animation params
+         } else {
+           throw new Error('Microservice spin failed');
+         }
+       } catch (err) {
+         console.warn('Microservice spin failed, falling back to client-side', err);
+        // Fallback to client-side calculation
+        const guaranteedPrizeId = active.settings?.guaranteedPrize;
+        if (useSequencePrize) {
+          chosen = SLICES.find(slice => slice.id === useSequencePrize);
+          if (!chosen) chosen = pickWeighted(SLICES, guaranteedPrizeId);
+        } else if (useGuaranteedPrize) {
+          chosen = SLICES.find(slice => slice.id === active.settings.guaranteedPrize);
+          if (!chosen) chosen = pickWeighted(SLICES);
+        } else {
+          // Random selection - exclude guaranteed prize if in enhanced mode
+          const excludeGuaranteed = active.settings?.guaranteedPrizeEnabled && guaranteedPrizeId;
+          chosen = pickWeighted(SLICES, excludeGuaranteed ? guaranteedPrizeId : null);
+        }
+         spin._result = chosen;
+         spin._animation = null;
        }
      } else {
-       // Use weighted selection - prize weights are ALWAYS respected
-       chosen = pickWeighted(SLICES);
+      // Client-side calculation (default)
+      const guaranteedPrizeId = active.settings?.guaranteedPrize;
+      if (useSequencePrize) {
+        chosen = SLICES.find(slice => slice.id === useSequencePrize);
+        if (!chosen) {
+          chosen = pickWeighted(SLICES, guaranteedPrizeId);
+        }
+      } else if (useGuaranteedPrize) {
+        chosen = SLICES.find(slice => slice.id === active.settings.guaranteedPrize);
+        if (!chosen) {
+          chosen = pickWeighted(SLICES);
+        }
+      } else {
+        // Random selection - exclude guaranteed prize if in enhanced mode
+        const excludeGuaranteed = active.settings?.guaranteedPrizeEnabled && guaranteedPrizeId;
+        chosen = pickWeighted(SLICES, excludeGuaranteed ? guaranteedPrizeId : null);
+      }
+       spin._result = chosen;
+       spin._animation = null;
      }
      
      const idx = SLICES.indexOf(chosen);
      const targetCenter = centerAngleForIndex(idx);
-     const fullSpins = (5 + Math.floor(Math.random()*3)) * TWO_PI; // 5-7 full spins
+     
+     // Use animation params from microservice if available
+     const animation = spin._animation;
+     const fullSpins = animation ? (animation.fullSpins * TWO_PI) : ((5 + Math.floor(Math.random()*3)) * TWO_PI);
+     const animDuration = animation ? animation.duration : (4.25 + Math.random()*0.9);
+     
      rotStart = wheel.rotation % TWO_PI;
      rotEnd   = targetCenter + fullSpins;
-     duration = 4.25 + Math.random()*0.9;
+     duration = animDuration;
      t = 0; spinning = true;
-     updateSpinButtonState(); // Update button state
+     updateSpinButtonState();
      sfxSpin();
-     spin._result = chosen;
    }
   async function onSpinComplete(){
     spinning = false; // Reset spinning state
@@ -822,20 +1218,35 @@
     sfxWin(); 
     spawnConfetti(140);
     
-    try{
-      const response=await fetch(CONFIG.API_ENDPOINT,{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:res.id, prize:res.label, weight:res.weight, ts: Date.now(), template: active.name })
-      });
-      if(!response.ok) throw new Error('HTTP '+response.status);
-      await response.json().catch(()=>({ok:true}));
-    }catch(err){ 
-      // Silently handle API errors without showing user notification
-      console.warn('API error', err); 
-    }
-    
-    // Show congratulations modal for prize announcement
+    // Show congratulations modal IMMEDIATELY (don't wait for API calls)
     showCongratsModal(res);
+    
+    // API calls in background (non-blocking)
+    (async () => {
+      try{
+        // Ensure session exists
+        await getOrCreateSession();
+        
+        const response=await fetch(CONFIG.API_ENDPOINT,{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ 
+            id: res.id, 
+            prize: res.label, 
+            weight: res.weight, 
+            ts: Date.now(), 
+            template: active.name,
+            sessionId: gameSession?.id,
+            prizes: SLICES.map(s => ({ id: s.id, label: s.label, weight: s.weight })) // Send prizes array for probability calculation
+          })
+        });
+        if(!response.ok) throw new Error('HTTP '+response.status);
+        const result = await response.json();
+        console.log('Prize claimed successfully:', result);
+      }catch(err){ 
+        // Silently handle API errors without showing user notification
+        console.warn('API error', err); 
+      }
+    })();
   }
   function showToast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.style.display='block'; clearTimeout(showToast._t); showToast._t=setTimeout(()=> el.style.display='none', 2200); }
 
@@ -1586,9 +1997,17 @@
     spinButton.buttonMode = true;
     spinButton.cursor = 'pointer';
     
+    // Set canvas cursor to pointer when hovering over button
+    const canvas = app.view;
+    
     // Hover effects (only if no image)
     if (!active.assets?.canvasSpinBtn) {
       spinButton.on('pointerover', () => {
+        // Set cursor to pointer
+        if (canvas && canvas.style) {
+          canvas.style.cursor = 'pointer';
+        }
+        // Visual hover effect
         spinButton.clear();
         spinButton.beginFill(hoverColor);
         spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
@@ -1602,6 +2021,11 @@
       });
       
       spinButton.on('pointerout', () => {
+        // Reset cursor
+        if (canvas && canvas.style) {
+          canvas.style.cursor = 'default';
+        }
+        // Visual reset
         spinButton.clear();
         spinButton.beginFill(primaryColor);
         spinButton.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 14 * dpr);
@@ -1612,6 +2036,19 @@
         spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
         spinButton.endFill();
         spinButton.addChild(text);
+      });
+    } else {
+      // If using image, just set cursor (no visual hover effect)
+      spinButton.on('pointerover', () => {
+        if (canvas && canvas.style) {
+          canvas.style.cursor = 'pointer';
+        }
+      });
+      
+      spinButton.on('pointerout', () => {
+        if (canvas && canvas.style) {
+          canvas.style.cursor = 'default';
+        }
       });
     }
     
@@ -1671,16 +2108,59 @@
       canvasSpinBtnBorderColor.value = active.colors.canvasSpinBtnBorder || '#0fb168';
     }
 
+    // Populate guaranteed prize dropdown first
+    guaranteedPrize.innerHTML = '<option value="">Random Prize (Normal)</option>' + 
+      SLICES.map(slice => `<option value="${slice.id}">${slice.label}</option>`).join('');
+    
     // Guaranteed prize settings
-    if (active.settings) {
-      guaranteedPrize.value = active.settings.guaranteedPrize || '';
+    if (active.settings && active.settings.guaranteedPrize) {
+      guaranteedPrize.value = active.settings.guaranteedPrize;
     } else {
       guaranteedPrize.value = '';
     }
     
-    // Populate guaranteed prize dropdown
-    guaranteedPrize.innerHTML = '<option value="">Random Prize (Normal)</option>' + 
-      SLICES.map(slice => `<option value="${slice.id}">${slice.label}</option>`).join('');
+    // Enable/disable the checkbox based on whether a guaranteed prize is selected
+    const hasGuaranteedPrize = guaranteedPrize.value && guaranteedPrize.value.trim();
+    guaranteedPrizeEnabled.disabled = !hasGuaranteedPrize;
+    
+    // Enhanced guaranteed prize settings
+    if (active.settings) {
+      // Only allow enabled if a guaranteed prize is set
+      if (hasGuaranteedPrize) {
+        guaranteedPrizeEnabled.checked = active.settings.guaranteedPrizeEnabled || false;
+      } else {
+        guaranteedPrizeEnabled.checked = false;
+        active.settings.guaranteedPrizeEnabled = false;
+      }
+      // Set spin count with validation
+      const maxSpins = SLICES.length; // Maximum is total number of prizes
+      const savedCount = active.settings.guaranteedSpinCount || 5;
+      const validCount = Math.max(2, Math.min(maxSpins, savedCount));
+      guaranteedSpinCount.value = validCount;
+      guaranteedSpinCount.min = 2; // Minimum is always 2
+      guaranteedSpinCount.max = maxSpins; // Maximum is total prizes
+      
+      // Update saved value if it was invalid
+      if (savedCount !== validCount) {
+        active.settings.guaranteedSpinCount = validCount;
+      }
+      guaranteedSpinCountRow.style.display = (guaranteedPrizeEnabled.checked && hasGuaranteedPrize) ? 'flex' : 'none';
+      
+      // Regenerate prize sequence boxes if enabled
+      if (guaranteedPrizeEnabled.checked && hasGuaranteedPrize) {
+        generatePrizeSequenceBoxes();
+      } else {
+        guaranteedPrizeSequenceRow.style.display = 'none';
+      }
+    } else {
+      guaranteedPrizeEnabled.checked = false;
+      const maxSpins = SLICES.length;
+      guaranteedSpinCount.value = Math.max(2, Math.min(5, maxSpins));
+      guaranteedSpinCount.min = 2;
+      guaranteedSpinCount.max = maxSpins;
+      guaranteedSpinCountRow.style.display = 'none';
+      guaranteedPrizeSequenceRow.style.display = 'none';
+    }
 
     forceSelect.innerHTML = '<option value="">Force Prize (QA)</option>' + SLICES.map((s,i)=>`<option value="${i}">${s.label}</option>`).join('');
     updateSoundButton();
@@ -1934,7 +2414,19 @@ function generateStandaloneHTML(templateData) {
     
     const TWO_PI = Math.PI * 2;
     const globalSliceAngle = ()=> TWO_PI / SLICES.length;
-    function pickWeighted(items){ const total=items.reduce((s,x)=>s+(x.weight??1),0); let r=Math.random()*total; for(const it of items){ r-=(it.weight??1); if(r<=0) return it; } return items[items.length-1]; }
+    function pickWeighted(items, excludeId = null){ 
+      const filteredItems = excludeId ? items.filter(item => item.id !== excludeId) : items;
+      if (filteredItems.length === 0) {
+        return items[items.length - 1];
+      }
+      const total=filteredItems.reduce((s,x)=>s+(x.weight??1),0); 
+      let r=Math.random()*total; 
+      for(const it of filteredItems){ 
+        r-=(it.weight??1); 
+        if(r<=0) return it; 
+      } 
+      return filteredItems[filteredItems.length-1]; 
+    }
     function centerAngleForIndex(idx){ const slice = globalSliceAngle(); return - (idx + 0.5) * slice; }
     
     const confettiLayer=new PIXI.Container(); root.addChild(confettiLayer);

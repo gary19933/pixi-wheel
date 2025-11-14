@@ -250,7 +250,22 @@
             <option value="">Random Prize (Normal)</option>
           </select>
         </div>
-        <div class="subtle">🎯 Set a specific prize that the player will always win. Useful for testing or special events!</div>
+        <div class="row">
+          <label>
+            <input type="checkbox" id="guaranteedPrizeEnabled" style="width: auto; margin-right: 8px;">
+            Enable Guaranteed Prize on Nth Spin
+          </label>
+        </div>
+        <div class="row" id="guaranteedSpinCountRow" style="display: none;">
+          <label>Guaranteed Prize After</label>
+          <input type="number" id="guaranteedSpinCount" min="2" value="5" style="width: 80px;">
+          <span>spin(s)</span>
+        </div>
+        <div id="guaranteedPrizeSequenceRow" style="display: none; margin-top: 10px;">
+          <div class="subtle" style="margin-bottom: 8px;">Set prizes for each spin before the guaranteed prize:</div>
+          <div id="guaranteedPrizeSequence"></div>
+        </div>
+        <div class="subtle">🎯 Set a specific prize that the player will always win. Enable "Nth Spin" to give the guaranteed prize only after a certain number of spins (e.g., every 5th spin).</div>
       </div>
 
       <h3>Terms &amp; Conditions</h3>

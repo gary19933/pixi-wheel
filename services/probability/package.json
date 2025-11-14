@@ -1,0 +1,16 @@
+{
+  "name": "pixi-wheel-probability",
+  "version": "1.0.0",
+  "description": "Probability service for Pixi Wheel - handles weighted selection and probability calculations",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+}
+
