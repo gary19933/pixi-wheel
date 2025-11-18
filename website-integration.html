@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Spin Wheel</title>
+  <script src="https://unpkg.com/pixi.js@7.4.0/dist/pixi.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    #game { width: 100vw; height: 100vh; }
+    #spinBtn { 
+      position: fixed; 
+      bottom: 50px; 
+      left: 50%; 
+      transform: translateX(-50%);
+      padding: 15px 40px;
+      font-size: 20px;
+      font-weight: bold;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+      z-index: 1000;
+      transition: all 0.3s;
+    }
+    #spinBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #101a17;
+      color: #d0ffe9;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-weight: 600;
+      z-index: 2000;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="loadingScreen" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10000; display: none; background-size: cover; background-position: center; background-repeat: no-repeat;"></div>
+  <div id="game"></div>
+  <button id="spinBtn">SPIN</button>
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // ========== CONFIGURATION ==========
+    // Replace these with your values:
+    const API_BASE = 'https://your-api.railway.app';  // Your backend API URL
+    const TEMPLATE_NAME = 'spin_wheel_a';              // Website's template name
+    
+    // Get playerId from URL parameter (set by URewards when redirecting user)
+    // Example: https://your-website.com/spin-wheel.html?playerId=user123&template=spin_wheel_a
+    const urlParams = new URLSearchParams(window.location.search);
+    const PLAYER_ID = urlParams.get('playerId') || null;  // Get from URL, or set by URewards
+    
+    // ========== INITIALIZATION ==========
+    (async function() {
+      try {
+        // 1. Fetch template config from your API
+        console.log('Loading template:', TEMPLATE_NAME);
+        const configRes = await fetch(`${API_BASE}/api/gameplay/config?template=${TEMPLATE_NAME}`);
+        
+        if (!configRes.ok) {
+          throw new Error(`Failed to load template: ${configRes.status}`);
+        }
+        
+        const { config } = await configRes.json();
+        console.log('✅ Template loaded:', config);
+        
+        // 2. Extract data
+        const prizes = config.prizes || [];
+        const design = config.designConfig || {};
+        const assets = design.assets || {};
+        const colors = design.colors || {};
+        
+        if (prizes.length < 2) {
+          throw new Error('Template needs at least 2 prizes');
+        }
+        
+        // 2.5. Show loading screen if configured
+        const loadingScreen = document.getElementById('loadingScreen');
+        if (assets.loadingScreen) {
+          loadingScreen.style.backgroundImage = `url(${assets.loadingScreen})`;
+          loadingScreen.style.display = 'block';
+          document.getElementById('game').style.display = 'none';
+          document.getElementById('spinBtn').style.display = 'none';
+        }
+        
+        // 3. Apply background (color, gradient, or image)
+        if (assets.bg) {
+          // Background image (will be drawn in PixiJS layer)
+          document.body.style.backgroundColor = '#000';
+        } else if (colors.pageBackground) {
+          const bg = colors.pageBackground;
+          if (bg.type === 'gradient' && bg.style) {
+            document.body.style.background = bg.style;
+          } else {
+            const bgStyle = bg.style || bg;
+            document.body.style.backgroundColor = bgStyle;
+          }
+        } else {
+          document.body.style.backgroundColor = '#0a2b22';
+        }
+        
+        // 4. Apply spin button colors
+        const spinBtn = document.getElementById('spinBtn');
+        if (colors.canvasSpinBtn) {
+          spinBtn.style.background = colors.canvasSpinBtn;
+        } else if (colors.spinButton) {
+          if (colors.spinButton.type === 'gradient' && colors.spinButton.style) {
+            spinBtn.style.background = colors.spinButton.style;
+          } else {
+            spinBtn.style.background = colors.spinButton.style || colors.spinButton || '#24d58b';
+          }
+        } else {
+          spinBtn.style.background = '#24d58b';
+        }
+        
+        if (colors.canvasSpinBtnHover) {
+          spinBtn.onmouseenter = () => spinBtn.style.background = colors.canvasSpinBtnHover;
+          spinBtn.onmouseleave = () => spinBtn.style.background = colors.canvasSpinBtn || '#24d58b';
+        } else if (colors.spinButton) {
+          spinBtn.onmouseenter = () => spinBtn.style.opacity = '0.9';
+          spinBtn.onmouseleave = () => spinBtn.style.opacity = '1';
+        } else {
+          spinBtn.onmouseenter = () => spinBtn.style.background = '#2be68b';
+          spinBtn.onmouseleave = () => spinBtn.style.background = '#24d58b';
+        }
+        
+        if (colors.canvasSpinBtnBorder) {
+          spinBtn.style.border = `2px solid ${colors.canvasSpinBtnBorder}`;
+        }
+        
+        // 5. Initialize PixiJS
+        const app = new PIXI.Application({
+          resizeTo: document.getElementById('game'),
+          backgroundAlpha: 0,
+          antialias: true,
+          autoDensity: true
+        });
+        document.getElementById('game').appendChild(app.view);
+        
+        // 6. Setup containers
+        const root = new PIXI.Container();
+        const bgLayer = new PIXI.Container();
+        const wheelContainer = new PIXI.Container();
+        const logoLayer = new PIXI.Container();
+        
+        root.addChild(bgLayer);
+        root.addChild(wheelContainer);
+        root.addChild(logoLayer);
+        app.stage.addChild(root);
+        
+        // Background sprite (for background image)
+        const bgSprite = new PIXI.Sprite();
+        bgLayer.addChild(bgSprite);
+        
+        // Logo sprite
+        const logoSprite = new PIXI.Sprite();
+        logoLayer.addChild(logoSprite);
+        
+        // 7. Constants
+        const BASE_RADIUS = 400;
+        const HUB_RADIUS = 80;
+        let WHEEL_RADIUS = BASE_RADIUS;
+        const wheelSize = design.wheelSize || 1.0;
+        WHEEL_RADIUS = BASE_RADIUS * wheelSize;
+        
+        // Center wheel
+        function layout() {
+          const vw = app.renderer.width;
+          const vh = app.renderer.height;
+          wheelContainer.x = vw / 2;
+          wheelContainer.y = vh / 2 - 50;
+          
+          // Position logo above wheel
+          if (logoSprite.texture && logoSprite.texture.baseTexture.valid) {
+            logoSprite.x = wheelContainer.x;
+            logoSprite.y = wheelContainer.y - WHEEL_RADIUS - 140;
+          }
+          
+          // Background image
+          if (bgSprite.texture && bgSprite.texture.baseTexture.valid) {
+            const iw = bgSprite.texture.width;
+            const ih = bgSprite.texture.height;
+            const s = Math.max(vw / iw, vh / ih);
+            bgSprite.scale.set(s);
+            bgSprite.x = (vw - iw * s) / 2;
+            bgSprite.y = (vh - ih * s) / 2;
+          }
+        }
+        app.renderer.on('resize', layout);
+        layout();
+        
+        // 8. Helper functions
+        function normalizeColor(c) {
+          if (typeof c === 'number') return c;
+          if (typeof c === 'string') {
+            if (c.startsWith('#')) return parseInt(c.slice(1), 16);
+            if (/^0x/i.test(c)) return parseInt(c, 16);
+          }
+          return 0x25c77a;
+        }
+        
+        // 9. Draw wheel
+        const base = new PIXI.Graphics();
+        const rim = new PIXI.Graphics();
+        const wheel = new PIXI.Container();
+        const hub = new PIXI.Graphics();
+        const pointer = new PIXI.Graphics();
+        const dots = new PIXI.Graphics();
+        const labels = [];
+        const hubLayer = new PIXI.Container();
+        
+        wheelContainer.addChild(base, rim, wheel, dots, hubLayer, pointer);
+        
+        // Wheel image sprite (if custom wheel image provided)
+        const wheelImageSprite = new PIXI.Sprite();
+        
+        function drawWheel() {
+          base.clear();
+          rim.clear();
+          wheel.removeChildren();
+          labels.length = 0;
+          dots.clear();
+          hub.clear();
+          pointer.clear();
+          hubLayer.removeChildren();
+          
+          // Base and rim
+          base.beginFill(0x071a15).drawCircle(0, 0, WHEEL_RADIUS + 28).endFill();
+          base.alpha = 0.9;
+          rim.beginFill(0x114b3c).drawCircle(0, 0, WHEEL_RADIUS + 12).endFill();
+          
+          // Check if custom wheel image exists
+          if (assets.wheel) {
+            // Use custom wheel image
+            wheelImageSprite.texture = PIXI.Texture.from(assets.wheel);
+            wheelImageSprite.anchor.set(0.5);
+            const iw = wheelImageSprite.texture.width;
+            const ih = wheelImageSprite.texture.height;
+            const s = (WHEEL_RADIUS * 2) / Math.max(iw, ih);
+            wheelImageSprite.scale.set(s);
+            wheelImageSprite.x = 0;
+            wheelImageSprite.y = 0;
+            if (!wheelImageSprite.parent) {
+              wheel.addChildAt(wheelImageSprite, 0);
+            }
+          } else {
+            // Draw slices manually
+            const sliceAngle = (Math.PI * 2) / prizes.length;
+            for (let i = 0; i < prizes.length; i++) {
+              const prize = prizes[i];
+              const color = normalizeColor(prize.color || '#25c77a');
+              
+              // Slice
+              const g = new PIXI.Graphics();
+              g.beginFill(color)
+                .moveTo(0, 0)
+                .arc(0, 0, WHEEL_RADIUS, -Math.PI/2 + i*sliceAngle, -Math.PI/2 + (i+1)*sliceAngle)
+                .lineTo(0, 0)
+                .endFill();
+              g.lineStyle(2, 0xffffff, 0.15)
+                .arc(0, 0, WHEEL_RADIUS, -Math.PI/2 + i*sliceAngle, -Math.PI/2 + (i+1)*sliceAngle);
+              wheel.addChild(g);
+              
+              // Label
+              const text = new PIXI.Text(prize.label, {
+                fill: '#063e2f',
+                fontSize: Math.max(18, WHEEL_RADIUS * 0.06),
+                fontWeight: '800',
+                fontFamily: 'Inter, Arial',
+                align: 'center',
+                wordWrap: true,
+                wordWrapWidth: Math.max(140, WHEEL_RADIUS * 0.45)
+              });
+              text.anchor.set(0.5);
+              const mid = -Math.PI/2 + (i + 0.5) * sliceAngle;
+              const r = WHEEL_RADIUS * 0.62;
+              text.x = Math.cos(mid) * r;
+              text.y = Math.sin(mid) * r;
+              text.rotation = mid + Math.PI/2;
+              labels.push(text);
+              wheel.addChild(text);
+            }
+          }
+          
+          // Hub (center button)
+          const HR = HUB_RADIUS * (WHEEL_RADIUS / BASE_RADIUS);
+          
+          if (assets.spin) {
+            // Use custom spin button image
+            const spinSprite = new PIXI.Sprite(PIXI.Texture.from(assets.spin));
+            spinSprite.anchor.set(0.5);
+            const iw = spinSprite.texture.width;
+            const ih = spinSprite.texture.height;
+            const s = (HR * 2) / Math.max(iw, ih);
+            spinSprite.scale.set(s);
+            spinSprite.x = 0;
+            spinSprite.y = 0;
+            hubLayer.addChild(spinSprite);
+          } else {
+            // Default hub with "GO" text
+            hub.beginFill(0xf9fffd).drawCircle(0, 0, HR).endFill();
+            hub.lineStyle(6, 0x1ab377, 1).drawCircle(0, 0, HR);
+            
+            const goText = new PIXI.Text('GO', {
+              fill: '#0e7b55',
+              fontSize: Math.max(28, HR * 0.55),
+              fontWeight: '900',
+              fontFamily: 'Inter, Arial'
+            });
+            goText.anchor.set(0.5);
+            hubLayer.addChild(hub, goText);
+          }
+          
+          // Pointer
+          const baseY = -HR - 6;
+          const tipY = -HR - 34 * (WHEEL_RADIUS / BASE_RADIUS);
+          pointer.beginFill(0xffee66)
+            .drawPolygon([-14, baseY, 14, baseY, 0, tipY])
+            .endFill();
+          pointer.lineStyle(3, 0x8a7a28, 1)
+            .moveTo(-14, baseY).lineTo(14, baseY).lineTo(0, tipY).lineTo(-14, baseY);
+          
+          // Dots decoration
+          dots.beginFill(0xffffff, 0.9);
+          const N = 60;
+          for (let i = 0; i < N; i++) {
+            const a = -Math.PI/2 + i * (Math.PI * 2 / N);
+            dots.drawCircle(
+              Math.cos(a) * (WHEEL_RADIUS + 4),
+              Math.sin(a) * (WHEEL_RADIUS + 4),
+              i % 2 ? 2.5 : 1.7
+            );
+          }
+          dots.endFill();
+        }
+        
+        // Draw logo
+        function drawLogo() {
+          logoSprite.texture = PIXI.Texture.EMPTY;
+          if (assets.logo) {
+            logoSprite.texture = PIXI.Texture.from(assets.logo);
+            logoSprite.anchor.set(0.5, 0.5);
+            const sc = 0.4;
+            logoSprite.scale.set(sc, sc);
+            layout(); // Update position
+          }
+        }
+        
+        // Draw background image
+        function drawBackground() {
+          bgSprite.texture = PIXI.Texture.EMPTY;
+          if (assets.bg) {
+            bgSprite.texture = PIXI.Texture.from(assets.bg);
+            layout(); // Update position
+          }
+        }
+        
+        // Load assets and draw
+        drawBackground();
+        drawLogo();
+        drawWheel();
+        
+        // Hide loading screen after everything is loaded
+        if (assets.loadingScreen) {
+          setTimeout(() => {
+            loadingScreen.style.display = 'none';
+            document.getElementById('game').style.display = 'block';
+            document.getElementById('spinBtn').style.display = 'block';
+          }, 1000); // Show loading screen for at least 1 second
+        }
+        
+        // 10. Spin logic
+        let spinning = false;
+        const toast = document.getElementById('toast');
+        
+        function showToast(msg) {
+          toast.textContent = msg;
+          toast.style.display = 'block';
+          setTimeout(() => toast.style.display = 'none', 2000);
+        }
+        
+        function pickWeighted(items) {
+          const total = items.reduce((sum, item) => sum + (item.weight || 1), 0);
+          let random = Math.random() * total;
+          for (const item of items) {
+            random -= (item.weight || 1);
+            if (random <= 0) return item;
+          }
+          return items[items.length - 1];
+        }
+        
+        function spin() {
+          if (spinning) return;
+          spinning = true;
+          spinBtn.disabled = true;
+          
+          // Pick prize
+          const selected = pickWeighted(prizes);
+          
+          // Calculate rotation
+          const sliceAngle = (Math.PI * 2) / prizes.length;
+          const selectedIndex = prizes.findIndex(p => p.id === selected.id);
+          const targetAngle = -Math.PI/2 + (selectedIndex + 0.5) * sliceAngle;
+          const fullSpins = 5 + Math.random() * 3;
+          const finalRotation = fullSpins * Math.PI * 2 + targetAngle;
+          
+          // Animate
+          const startRotation = wheel.rotation;
+          const duration = 3000;
+          const startTime = Date.now();
+          
+          function easeOutCubic(x) {
+            return 1 - Math.pow(1 - x, 3);
+          }
+          
+          function animate() {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const ease = easeOutCubic(progress);
+            wheel.rotation = startRotation + finalRotation * ease;
+            
+            // Label animation
+            labels.forEach((lbl) => {
+              const localTop = wheel.toLocal(new PIXI.Point(0, -WHEEL_RADIUS));
+              const ang = Math.atan2(lbl.y - localTop.y, lbl.x - localTop.x);
+              const n = 1 - Math.min(1, Math.abs(ang) / 1.2);
+              lbl.scale.set(1 + n * 0.05);
+            });
+            
+            if (progress < 1) {
+              requestAnimationFrame(animate);
+            } else {
+              wheel.rotation = startRotation + finalRotation;
+              onSpinComplete(selected);
+            }
+          }
+          
+          animate();
+        }
+        
+        // 11. Save result to API
+        async function onSpinComplete(prize) {
+          spinning = false;
+          const spinBtn = document.getElementById('spinBtn');
+          spinBtn.disabled = false;
+          
+          showToast(`🎉 You won: ${prize.label}!`);
+          
+          try {
+            const response = await fetch(`${API_BASE}/api/gameplay/claim`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                template: TEMPLATE_NAME,
+                id: prize.id,
+                prize: prize.label,
+                weight: prize.weight,
+                ts: Date.now(),
+                prizes: prizes
+              })
+            });
+            
+            if (response.ok) {
+              console.log('✅ Prize saved to API');
+            } else {
+              console.error('❌ Failed to save prize');
+            }
+          } catch (error) {
+            console.error('❌ Error saving prize:', error);
+          }
+        }
+        
+        // 12. Event listeners
+        spinBtn.addEventListener('click', spin);
+        
+        // Touch support
+        app.view.addEventListener('pointerdown', (e) => {
+          if (e.pointerType !== 'mouse' && !spinning) {
+            const rect = app.view.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+            
+            if (distance < WHEEL_RADIUS + 50) {
+              spin();
+            }
+          }
+        });
+        
+        console.log('✅ Spin wheel initialized');
+        
+      } catch (error) {
+        console.error('❌ Failed to initialize:', error);
+        document.body.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;color:#fff;background:#0a2b22;">
+            <h1>Failed to load spin wheel</h1>
+            <p>${error.message}</p>
+            <p style="margin-top:20px;font-size:12px;color:#888;">Check console for details</p>
+          </div>
+        `;
+      }
+    })();
+  </script>
+</body>
+</html>
+

@@ -1,20 +1,64 @@
 (async function(){
   try{
   // ---- Config ---------------------------------------------------------------
-  // Microservice Gateway URL - change this if your gateway runs on a different port/domain
-  const MICROSERVICE_GATEWAY = 'http://localhost:3000';
+  // Backend API URL - uses environment variable or defaults to localhost for development
+  // In production, set VITE_API_GATEWAY environment variable (e.g., https://api.yoursite.com)
+  let MICROSERVICE_GATEWAY = 'http://localhost:3000';
+  let USE_MICROSERVICE_FOR_SPIN = false;
+  
+  // Try to get Vite environment variables (only works when processed by Vite)
+  try {
+    // In ES modules, import.meta is available - access it directly
+    const env = import.meta.env;
+    if (env) {
+      MICROSERVICE_GATEWAY = env.VITE_API_GATEWAY || MICROSERVICE_GATEWAY;
+      USE_MICROSERVICE_FOR_SPIN = env.VITE_USE_MICROSERVICE_FOR_SPIN === 'true';
+    }
+  } catch (e) {
+    // Not in Vite environment or import.meta not available, use defaults
+  }
+  
+  // Fallback: detect environment from window location
+  if (typeof window !== 'undefined') {
+    if (window.location.origin.includes('localhost')) {
+      MICROSERVICE_GATEWAY = 'http://localhost:3000';
+    } else {
+      MICROSERVICE_GATEWAY = window.location.origin;
+    }
+  }
+  
   const CONFIG = { 
     API_ENDPOINT: `${MICROSERVICE_GATEWAY}/api/gameplay/claim`, 
-    USE_MICROSERVICE_FOR_SPIN: false, // Set to true to use microservice for spin results (server-side)
+    USE_MICROSERVICE_FOR_SPIN: USE_MICROSERVICE_FOR_SPIN,
     ENABLE_SFX: true, 
     BASE_RADIUS: 400, 
     HUB_RADIUS: 80 
   };
 
+  // ---- Loading Screen -----------------------------------------------------
+  const loadingScreen = document.createElement('div');
+  loadingScreen.id = 'loadingScreen';
+  loadingScreen.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10000; display: none; background-size: cover; background-position: center; background-repeat: no-repeat;';
+  document.body.appendChild(loadingScreen);
+  
+  function showLoadingScreen() {
+    // Check if active is available before accessing it
+    if (typeof active !== 'undefined' && active?.assets?.loadingScreen) {
+      loadingScreen.style.backgroundImage = `url(${active.assets.loadingScreen})`;
+      loadingScreen.style.display = 'block';
+      document.getElementById('game').style.display = 'none';
+    }
+  }
+  
+  function hideLoadingScreen() {
+    loadingScreen.style.display = 'none';
+    document.getElementById('game').style.display = 'block';
+  }
+
   // ---- Pixi app ------------------------------------------------------------
   const app = new PIXI.Application({ resizeTo: document.getElementById('game'), backgroundAlpha: 0, antialias: true, autoDensity: true, powerPreference: 'high-performance' });
   document.getElementById('game').appendChild(app.view);
-  const DESIGN = { w: 900, h: 1400 };
+  const DESIGN = { w: 1080, h: 1920 };
 
   // Root & layers ------------------------------------------------------------
   const root = new PIXI.Container();
@@ -33,38 +77,502 @@
 
   // Responsive ---------------------------------------------------------------
   let sizeMultiplier = 1.6; let autoMultiplier = 1;
-  function computeAutoMultiplier(){ const vw=app.renderer.width, vh=app.renderer.height; const minEdge=Math.min(vw,vh); const targetDiameter=minEdge*0.8; autoMultiplier = targetDiameter/(CONFIG.BASE_RADIUS*2); autoMultiplier=Math.max(0.6, Math.min(1.6, autoMultiplier)); }
-  function layout(){ const vw=app.renderer.width, vh=app.renderer.height; const scale=Math.min(vw/DESIGN.w, vh/DESIGN.h); root.scale.set(scale); root.x=vw/2-(DESIGN.w*scale)/2; root.y=vh/2-(DESIGN.h*scale)/2; wheelContainer.x=DESIGN.w/2; wheelContainer.y=(vw>vh)? DESIGN.h/2-40 : DESIGN.h/2-80; drawBackground(); computeAutoMultiplier(); drawWheel(); drawLogo(); drawTopbar(); drawSpinButton(); }
+  // Store calculated wheel radius directly for mobile (in DESIGN coordinates)
+  let calculatedWheelRadius = null;
+  
+  function computeAutoMultiplier(){ 
+    const vw=app.renderer.width, vh=app.renderer.height; 
+    const mobile = isMobile();
+    const minEdge=Math.min(vw,vh); 
+    const maxEdge=Math.max(vw,vh);
+    
+    if (mobile) {
+      // Mobile: Calculate wheel size DIRECTLY from available space (no fixed scale)
+      // This method calculates the actual wheel radius in screen pixels, then converts to DESIGN coordinates
+      const safeArea = getSafeAreaInsets();
+      const topbarHeight = Math.max(12, safeArea.top + 8) + 30; // Topbar + buttons
+      const logoHeight = 50; // Estimated logo height
+      const logoSpacing = 40; // Reduced to give more space to wheel
+      const chanceHeight = 30;
+      const chanceSpacing = 50; // Reduced spacing
+      const buttonHeight = 22; // Updated to match actual button height
+      const buttonSpacing = 30; // Reduced spacing
+      const bottomPadding = Math.max(15, safeArea.bottom + 8); // Reduced padding
+      
+      // Calculate available space for wheel dynamically
+      const usedSpace = topbarHeight + logoHeight + logoSpacing + chanceHeight + chanceSpacing + buttonHeight + buttonSpacing + bottomPadding;
+      const availableHeight = vh - usedSpace;
+      
+      // Calculate available width (account for safe areas and left/right margins)
+      const safeAreaLeft = safeArea.left || 0;
+      const safeAreaRight = safeArea.right || 0;
+      // Add left and right margins for spin wheel on mobile
+      const wheelLeftMargin = 20; // Left margin in pixels
+      const wheelRightMargin = 20; // Right margin in pixels
+      const availableWidth = vw - safeAreaLeft - safeAreaRight - wheelLeftMargin - wheelRightMargin;
+      
+      // Dynamic percentage based on screen aspect ratio
+      const aspectRatio = vh / vw;
+      const isPortrait = aspectRatio > 1.2; // Portrait mode
+      
+      // Use maximum space - match screenshot where wheel is very large
+      const heightPercentage = isPortrait ? 0.99 : 0.96; // Use 99% of height in portrait
+      const widthPercentage = isPortrait ? 0.95 : 0.98; // Use 95% of width in portrait
+      
+      // Calculate max wheel diameter in SCREEN PIXELS (not DESIGN coordinates)
+      const maxWheelDiameterFromHeight = availableHeight * heightPercentage;
+      const maxWheelDiameterFromWidth = availableWidth * widthPercentage;
+      
+      // Use the smaller of the two to ensure wheel fits both dimensions
+      const maxWheelDiameterScreen = Math.min(maxWheelDiameterFromHeight, maxWheelDiameterFromWidth);
+      
+      // Calculate wheel radius in SCREEN PIXELS
+      const wheelRadiusScreen = maxWheelDiameterScreen / 2;
+      
+      // Convert screen radius to DESIGN coordinates
+      // Calculate the scale that will be used in layout()
+      // Mobile uses min of scaleX and scaleY to fit screen
+      const scaleX = vw / DESIGN.w;
+      const scaleY = vh / DESIGN.h;
+      const scale = Math.min(scaleX, scaleY);
+      
+      // Clamp scale for mobile (same as in layout function)
+      const minScale = 0.3;
+      const maxScale = 2.0;
+      const clampedScale = Math.max(minScale, Math.min(maxScale, scale));
+      
+      // Convert screen radius to DESIGN coordinates using the scale
+      const wheelRadiusDesign = wheelRadiusScreen / clampedScale;
+      
+      // Store the calculated radius directly (will be used in drawWheel)
+      calculatedWheelRadius = wheelRadiusDesign;
+      
+      // Also calculate autoMultiplier for compatibility (but won't limit size)
+      autoMultiplier = wheelRadiusDesign / CONFIG.BASE_RADIUS;
+      
+      // No limits - use the calculated size directly
+    } else {
+      // Web: Original logic
+      const targetDiameter=minEdge*0.8; 
+      autoMultiplier = targetDiameter/(CONFIG.BASE_RADIUS*2); 
+      autoMultiplier=Math.max(0.6, Math.min(1.6, autoMultiplier)); 
+      calculatedWheelRadius = null; // Reset for web
+    }
+  }
+  // Helper function to detect mobile - improved detection
+  function isMobile() {
+    // Check user agent
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    
+    // Check screen size (more accurate for mobile)
+    const isMobileSize = window.innerWidth <= 768 || window.screen.width <= 768;
+    
+    // Check touch capability
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
+    // Mobile if: (UA matches OR screen is small) AND (touch device OR small screen)
+    return (isMobileUA || isMobileSize) && (isTouchDevice || isMobileSize);
+  }
+  
+  // Get actual screen dimensions for better scaling
+  function getScreenDimensions() {
+    return {
+      width: window.innerWidth || window.screen.width,
+      height: window.innerHeight || window.screen.height,
+      isPortrait: (window.innerHeight || window.screen.height) > (window.innerWidth || window.screen.width)
+    };
+  }
+  
+  // Get safe area insets for iPhone notch/Dynamic Island and Android status bar
+  function getSafeAreaInsets() {
+    // Try to get CSS safe-area-inset values
+    const style = getComputedStyle(document.documentElement);
+    const safeAreaTop = parseInt(style.getPropertyValue('--safe-area-inset-top') || '0');
+    
+    // If CSS variable not available, detect device type
+    if (safeAreaTop === 0) {
+      const ua = navigator.userAgent || navigator.vendor || window.opera;
+      const isIOS = /iPad|iPhone|iPod/.test(ua);
+      const isAndroid = /Android/.test(ua);
+      const isIPhoneX = isIOS && (window.screen.height >= 812 || window.screen.width >= 812);
+      
+      if (isIPhoneX) {
+        // iPhone X and newer have notch/Dynamic Island
+        // Approximate safe area: 44-59px for notch, 59px+ for Dynamic Island (iPhone 14 Pro and newer)
+        const screenHeight = window.screen.height;
+        if (screenHeight >= 932) {
+          // iPhone 14 Pro Max, 15 Pro Max, etc. - Dynamic Island
+          return { top: 59, bottom: 34, left: 0, right: 0 };
+        } else if (screenHeight >= 844) {
+          // iPhone 12/13/14 Pro, etc. - notch
+          return { top: 47, bottom: 34, left: 0, right: 0 };
+        } else {
+          // iPhone X/XS/11 Pro, etc. - notch
+          return { top: 44, bottom: 34, left: 0, right: 0 };
+        }
+      } else if (isAndroid) {
+        // Android devices typically have a status bar that's 24-32px tall
+        // Add minimum top margin to prevent buttons from being blocked
+        return { top: 28, bottom: 0, left: 0, right: 0 };
+      }
+    }
+    
+    return { top: safeAreaTop || 0, bottom: 0, left: 0, right: 0 };
+  }
+  
+  function layout(){ 
+    const vw=app.renderer.width, vh=app.renderer.height; 
+    const mobile = isMobile();
+    const screen = getScreenDimensions();
+    
+    // Ensure 9:16 aspect ratio (1080×1920 = 9:16)
+    // DESIGN dimensions are already 9:16 ratio
+    const DESIGN_ASPECT_RATIO = DESIGN.w / DESIGN.h; // Should be 9/16 = 0.5625
+    
+    // Mobile: Auto-fit to screen while maintaining 9:16 aspect ratio
+    // Web: Fixed 1080×1920 (maintains aspect ratio)
+    let scale;
+    if (mobile) {
+      // Mobile: Scale to fill screen while maintaining 9:16 ratio
+      // Calculate scale based on viewport, but ensure we maintain the 9:16 ratio
+      const scaleX = vw / DESIGN.w;
+      const scaleY = vh / DESIGN.h;
+      scale = Math.min(scaleX, scaleY); // Use smaller scale to maintain aspect ratio
+      
+      // For very small screens, ensure minimum scale
+      const minScale = 0.3;
+      const maxScale = 2.0;
+      scale = Math.max(minScale, Math.min(maxScale, scale));
+      
+      // Ensure the scaled dimensions maintain 9:16 ratio
+      // The scale calculation already does this, but we verify
+      const scaledWidth = DESIGN.w * scale;
+      const scaledHeight = DESIGN.h * scale;
+      const actualAspectRatio = scaledWidth / scaledHeight;
+      
+      // If aspect ratio is off, adjust (shouldn't happen with Math.min, but safety check)
+      if (Math.abs(actualAspectRatio - DESIGN_ASPECT_RATIO) > 0.01) {
+        // Recalculate to maintain exact 9:16
+        scale = Math.min(vw / DESIGN.w, vh / DESIGN.h);
+      }
+    } else {
+      // Web: Fixed 1080×1920 design, scale to fit viewport while maintaining aspect ratio
+      scale = Math.min(vw/DESIGN.w, vh/DESIGN.h);
+    }
+    
+    // Apply scale and center the 9:16 design area
+    root.scale.set(scale); 
+    root.x=vw/2-(DESIGN.w*scale)/2; 
+    root.y=vh/2-(DESIGN.h*scale)/2; 
+    
+    // Vertical layout: Logo → Wheel → Chance → Spin Button
+    // ===== WHEEL VERTICAL POSITION =====
+    // Mobile: Center wheel in available vertical space
+    // Web: Fixed position
+    let wheelY;
+    if (mobile) {
+      // Mobile: Calculate available vertical space and center wheel
+      const safeArea = getSafeAreaInsets();
+      
+      // Calculate top space (topbar + logo)
+      const topbarButtonSize = 30; // Mobile button size
+      const topbarMargin = Math.max(12, safeArea.top + 8);
+      const topbarHeight = topbarMargin + topbarButtonSize;
+      
+      // Logo height (estimated based on scale) - reduce spacing to give more room to wheel
+      const logoScale = 0.5; // Mobile logo scale
+      const estimatedLogoHeight = 100 * logoScale; // Approximate logo height
+      const logoSpacing = 40; // Reduced spacing between logo and wheel (was 60)
+      const topSpace = topbarHeight + estimatedLogoHeight + logoSpacing;
+      
+      // Calculate bottom space (chance counter + spin button + padding) - reduce spacing
+      const chanceCounterHeight = 30; // Font size
+      const chanceSpacing = 50; // Reduced spacing between wheel and chance counter (was 60)
+      const spinButtonHeight = 22; // Updated mobile button height
+      const spinButtonSpacing = 30; // Reduced spacing between chance counter and button (was 40)
+      const bottomPadding = 15; // Reduced bottom padding (was 20)
+      const bottomSpace = chanceSpacing + chanceCounterHeight + spinButtonSpacing + spinButtonHeight + bottomPadding;
+      
+      // Calculate available vertical space
+      const availableHeight = vh - topSpace - bottomSpace;
+      
+      // Get wheel radius (will be calculated in computeAutoMultiplier, but estimate first)
+      // Use a reasonable estimate for initial calculation
+      const estimatedWheelRadius = 200; // Will be adjusted after computeAutoMultiplier
+      
+      // Center the wheel in available space
+      // Position wheel center at: topSpace + (availableHeight / 2)
+      wheelY = topSpace + (availableHeight / 2);
+      
+      // Ensure wheel doesn't overflow (safety check)
+      wheelY = Math.max(estimatedWheelRadius + topSpace, Math.min(vh - estimatedWheelRadius - bottomSpace, wheelY));
+    } else {
+      // Web: Fixed position
+      wheelY = 800;
+    }
+    
+    wheelContainer.x = DESIGN.w/2; 
+    
+    // Set temporary wheel position (needed for computeAutoMultiplier and drawWheel)
+    wheelContainer.y = wheelY;
+    
+    drawBackground(); 
+    computeAutoMultiplier(); 
+    drawWheel(); // This calculates WHEEL_RADIUS
+    
+    // For mobile, recalculate wheel position to center everything vertically
+    if (mobile) {
+      const safeArea = getSafeAreaInsets();
+      
+      // All calculations in SCREEN COORDINATES (vh, actual pixels)
+      const topbarButtonSize = 30;
+      const topbarMargin = Math.max(12, safeArea.top + 8);
+      const topbarHeight = topbarMargin + topbarButtonSize;
+      
+      // Logo height in screen coordinates
+      const logoScale = 0.5;
+      let logoHeightScreen = 0;
+      if (logoSprite.texture && logoSprite.texture.baseTexture.valid) {
+        logoHeightScreen = (logoSprite.texture.height * logoScale) * scale;
+      } else {
+        logoHeightScreen = (100 * logoScale) * scale;
+      }
+      const logoSpacingScreen = 60 * scale;
+      
+      // Wheel diameter in screen coordinates
+      const wheelDiameterScreen = (WHEEL_RADIUS * 2) * scale;
+      const wheelRadiusScreen = WHEEL_RADIUS * scale;
+      
+      // Bottom elements in screen coordinates
+      const chanceCounterHeightScreen = 30 * scale;
+      const chanceSpacingScreen = 60 * scale;
+      const spinButtonHeightScreen = 15 * scale;
+      const spinButtonSpacingScreen = 40 * scale;
+      const bottomSafeArea = safeArea.bottom || 0;
+      const bottomPaddingScreen = Math.max(20, bottomSafeArea + 10);
+      
+      // Calculate total content height in SCREEN COORDINATES
+      const totalContentHeightScreen = 
+        topbarHeight + 
+        logoHeightScreen + 
+        logoSpacingScreen + 
+        wheelDiameterScreen + 
+        chanceSpacingScreen + 
+        chanceCounterHeightScreen + 
+        spinButtonSpacingScreen + 
+        spinButtonHeightScreen + 
+        bottomPaddingScreen;
+      
+      // Calculate white space and center content
+      const totalWhiteSpace = vh - totalContentHeightScreen;
+      const contentStartYScreen = totalWhiteSpace / 2;
+      
+      // Calculate wheel center in SCREEN COORDINATES
+      // From top of content: topbar + logo + logoSpacing + wheelRadius
+      const wheelCenterFromContentTopScreen = 
+        topbarHeight + 
+        logoHeightScreen + 
+        logoSpacingScreen + 
+        wheelRadiusScreen;
+      
+      // Final wheel center position in SCREEN COORDINATES
+      const wheelCenterYScreen = contentStartYScreen + wheelCenterFromContentTopScreen;
+      
+      // Convert screen Y to DESIGN Y coordinate
+      // wheelContainer.y is in DESIGN space (0-1920)
+      // Formula: designY = (screenY - root.y) / root.scale.y
+      wheelY = (wheelCenterYScreen - root.y) / root.scale.y;
+      
+      // Update wheel position in DESIGN coordinates
+      wheelContainer.y = wheelY;
+      
+      // Redraw wheel at correct position
+      drawWheel();
+    } 
+    // Logo is positioned in drawLogo() relative to wheel position
+    drawLogo(); 
+    drawGameLogo();
+    drawChanceCounter(); 
+    drawTopbar(); 
+    drawSpinButton(); 
+  }
   app.renderer.on('resize', layout);
+  
+  // Handle mobile orientation changes and window resize for better responsiveness
+  let resizeTimeout;
+  function handleResize() {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      // Update renderer size
+      const gameEl = document.getElementById('game');
+      if (gameEl) {
+        app.renderer.resize(gameEl.clientWidth, gameEl.clientHeight);
+        layout();
+      }
+    }, 150); // Debounce resize events
+  }
+  
+  // Listen for window resize and orientation changes
+  window.addEventListener('resize', handleResize);
+  window.addEventListener('orientationchange', () => {
+    // Delay to allow orientation change to complete
+    setTimeout(() => {
+      const gameEl = document.getElementById('game');
+      if (gameEl) {
+        app.renderer.resize(gameEl.clientWidth, gameEl.clientHeight);
+        layout();
+      }
+    }, 300);
+  });
 
   // ---- Templates -----------------------------------------------------------
   const LS_KEY = 'spinWheelTemplates.v1';
   function defaultTemplate(){ return { name:'Default', terms:`By participating you agree:
 • One spin per session.
 • Prizes are non-transferable.
-• Organizer reserves the right to modify terms.`, prizesText:'🎁 iPhone 15 Pro | 1 | #25c77a\n💰 RM 50 Credit | 2 | #E9FFF7\n🎉 Mystery Gift | 1 | #25c77a\n🧧 Angpao RM 10 | 2 | #E9FFF7\n🍀 Free Spin | 3 | #25c77a\n💎 Mega Gift Box | 0.5 | #E9FFF7', assets:{bg:null,logo:null,spin:null,rewardsBtn:null,infoBtn:null,soundUnmute:null,soundMute:null,rewardsModal:null,rewardsClose:null,infoModal:null,infoClose:null,wheel:null,canvasRewardsBtn:null,canvasInfoBtn:null,canvasSoundUnmute:null,canvasSoundMute:null,canvasSpinBtn:null,canvasRewardsModal:null,canvasRewardsClose:null,canvasInfoModal:null,canvasInfoClose:null,canvasCongratsModal:null,canvasCongratsClose:null}, colors:{pageBackground:{type:'color',style:'#0a2b22'},spinButton:{type:'gradient',style:'linear-gradient(to bottom, #24d58b, #0fb168)'},canvasBtnPrimary:'#17342c',canvasBtnHover:'#1b3e33',canvasBtnText:'#d9fff2',canvasModalBg:'#0e1f1a',canvasModalBorder:'#204a3e',canvasModalText:'#e8fff5',canvasSpinBtn:'#24d58b',canvasSpinBtnHover:'#2be68b',canvasSpinBtnBorder:'#0fb168'}, settings:{claimAction:'modal',claimUrl:'',guaranteedPrize:''} }; }
+• Organizer reserves the right to modify terms.`, prizesText:'🎁 iPhone 15 Pro | 1 | #25c77a\n💰 RM 50 Credit | 2 | #E9FFF7\n🎉 Mystery Gift | 1 | #25c77a\n🧧 Angpao RM 10 | 2 | #E9FFF7\n🍀 Free Spin | 3 | #25c77a\n💎 Mega Gift Box | 0.5 | #E9FFF7', assets:{loadingScreen:null,bg:null,logo:null,gameLogo:null,spin:null,pointer:null,hub:null,rewardsBtn:null,infoBtn:null,soundUnmute:null,soundMute:null,rewardsModal:null,rewardsClose:null,infoModal:null,infoClose:null,wheel:null,canvasRewardsBtn:null,canvasInfoBtn:null,canvasSoundUnmute:null,canvasSoundMute:null,canvasSpinBtn:null,canvasRewardsModal:null,canvasRewardsClose:null,canvasInfoModal:null,canvasInfoClose:null,canvasCongratsModal:null,canvasCongratsClose:null}, colors:{pageBackground:{type:'color',style:'#0a2b22'},spinButton:{type:'gradient',style:'linear-gradient(to bottom, #24d58b, #0fb168)'},canvasBtnPrimary:'#17342c',canvasBtnHover:'#1b3e33',canvasBtnText:'#d9fff2',canvasRewardsBtnColor:'#17342c',canvasInfoBtnColor:'#17342c',canvasModalBg:'#0e1f1a',canvasModalBorder:'#204a3e',canvasModalText:'#e8fff5',canvasSpinBtn:'#24d58b',canvasSpinBtnHover:'#2be68b',canvasSpinBtnBorder:'#0fb168'}, settings:{claimAction:'modal',claimUrl:'',guaranteedPrize:''} }; }
   function loadTemplates(){ try{ const arr=JSON.parse(localStorage.getItem(LS_KEY)||'[]'); if(Array.isArray(arr)&&arr.length) return arr; }catch{} const seed=[defaultTemplate()]; localStorage.setItem(LS_KEY, JSON.stringify(seed)); return seed; }
   function saveTemplates(){ localStorage.setItem(LS_KEY, JSON.stringify(templates)); }
   let templates = loadTemplates(); let activeIndex=0; let active=templates[activeIndex];
   
   // Session management for microservice
   let gameSession = null;
-  async function getOrCreateSession() {
+  let remainingSpins = null;
+  let sessionChecked = false; // Track if we've checked the session from backend
+  
+  async function getOrCreateSession(playerId = null) {
+    // Get playerId from URL parameter if not provided
+    if (!playerId) {
+      const urlParams = new URLSearchParams(window.location.search);
+      playerId = urlParams.get('playerId') || null;
+    }
+    
     if (!gameSession) {
       try {
         const response = await fetch(`${MICROSERVICE_GATEWAY}/api/gameplay/session`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            template: active.name,
+            playerId: playerId // Pass playerId if available (from URewards/3rd party backend)
+          })
         });
         if (response.ok) {
           gameSession = await response.json();
-          console.log('Game session created:', gameSession.id);
+          if (gameSession && gameSession.id) {
+            if (gameSession.maxSpins !== null && gameSession.maxSpins !== undefined) {
+              const maxSpins = Number(gameSession.maxSpins);
+              const spins = Number(gameSession.spins || 0);
+              remainingSpins = (!isNaN(maxSpins) && !isNaN(spins)) 
+                ? Math.max(0, maxSpins - spins) 
+                : null;
+            } else {
+              remainingSpins = null;
+            }
+            sessionChecked = true; // Mark that we've checked the session
+            console.log('Game session created:', gameSession.id, remainingSpins !== null ? `(${remainingSpins} spins remaining)` : '(unlimited)');
+            updateSpinButtonState();
+          } else {
+            console.warn('Session created but missing ID:', gameSession);
+          }
+        } else {
+          const errorText = await response.text();
+          console.error('Failed to create session:', response.status, errorText);
+          // Mark as checked even if failed - show unlimited spins
+          sessionChecked = true;
+          remainingSpins = null; // Unlimited when backend unavailable
         }
       } catch (err) {
         console.warn('Failed to create session, continuing without session tracking', err);
+        // Mark as checked even if failed - show unlimited spins
+        sessionChecked = true;
+        remainingSpins = null; // Unlimited when backend unavailable
+      }
+    } else {
+      // Refresh session info to get current spin count
+      try {
+        const response = await fetch(`${MICROSERVICE_GATEWAY}/api/gameplay/session/${gameSession.id}`);
+        if (response.ok) {
+          const session = await response.json();
+          if (session.maxSpins !== null && session.maxSpins !== undefined) {
+            const maxSpins = Number(session.maxSpins);
+            const spins = Number(session.spins || 0);
+            remainingSpins = (!isNaN(maxSpins) && !isNaN(spins)) 
+              ? Math.max(0, maxSpins - spins) 
+              : null;
+          } else {
+            remainingSpins = null;
+          }
+          sessionChecked = true; // Mark that we've checked the session
+          updateSpinButtonState();
+        } else if (response.status === 404) {
+          // Session not found, reset it so it can be recreated
+          console.warn('Session not found, will recreate on next spin');
+          gameSession = null;
+          sessionChecked = false;
+        }
+      } catch (err) {
+        console.warn('Failed to refresh session:', err);
+        // Mark as checked even if failed - show unlimited spins
+        sessionChecked = true;
+        remainingSpins = null; // Unlimited when backend unavailable
       }
     }
     return gameSession;
+  }
+  
+  async function checkCanSpin() {
+    if (!gameSession) {
+      await getOrCreateSession();
+    }
+    if (!gameSession || !gameSession.id) {
+      return true; // Allow if no session or session has no ID
+    }
+    
+    if (remainingSpins !== null && remainingSpins <= 0) {
+      return false;
+    }
+    
+    // Check with backend
+    try {
+      const response = await fetch(`${MICROSERVICE_GATEWAY}/api/gameplay/session/${gameSession.id}/can-spin`);
+      if (response.ok) {
+        const data = await response.json();
+        // Safely parse remainingSpins from API response
+        if (data.remainingSpins !== null && data.remainingSpins !== undefined) {
+          const parsed = Number(data.remainingSpins);
+          remainingSpins = isNaN(parsed) ? null : parsed;
+        } else {
+          remainingSpins = null;
+        }
+        return data.canSpin;
+      } else if (response.status === 404) {
+        // Session not found, try to recreate it
+        gameSession = null;
+        await getOrCreateSession();
+        if (gameSession && gameSession.id) {
+          // Retry the check with new session
+          const retryResponse = await fetch(`${MICROSERVICE_GATEWAY}/api/gameplay/session/${gameSession.id}/can-spin`);
+          if (retryResponse.ok) {
+            const retryData = await retryResponse.json();
+            // Safely parse remainingSpins from API response
+            if (retryData.remainingSpins !== null && retryData.remainingSpins !== undefined) {
+              const parsed = Number(retryData.remainingSpins);
+              remainingSpins = isNaN(parsed) ? null : parsed;
+            } else {
+              remainingSpins = null;
+            }
+            return retryData.canSpin;
+          }
+        }
+        return true; // Default to allowing if session recreation fails
+      }
+    } catch (err) {
+      console.warn('Failed to check spin limit:', err);
+    }
+    
+    return true; // Default to allowing if check fails
   }
 
   // ---- Prize parsing -------------------------------------------------------
@@ -116,6 +624,16 @@
   // Wheel Image elements
   const wheelFile = document.getElementById('wheelFile');
   const wheelClear = document.getElementById('wheelClear');
+  
+  // Hub and Pointer elements
+  const hubFile = document.getElementById('hubFile');
+  const hubClear = document.getElementById('hubClear');
+  const pointerFile = document.getElementById('pointerFile');
+  const pointerClear = document.getElementById('pointerClear');
+  
+  // Button color elements (canvasBtnTextColor and canvasBtnHoverColor declared later with other canvas controls)
+  const canvasRewardsBtnColor = document.getElementById('canvasRewardsBtnColor');
+  const canvasInfoBtnColor = document.getElementById('canvasInfoBtnColor');
 
   
   // Reset button
@@ -142,64 +660,6 @@
     
     wheelSizeDisplay.textContent = `${sizeMultiplier.toFixed(2)}x`;
     wheelDimensions.textContent = `(${actualSize}×${actualSize}px)`;
-  }
-
-  function refreshTemplateUI(){
-    templateSelect.innerHTML = templates.map((t,i)=>`<option value="${i}">${t.name||('Template '+(i+1))}</option>`).join('');
-    templateSelect.value = String(activeIndex);
-    templateName.value = active.name || '';
-    activeTemplateName.textContent = active.name || 'Template';
-
-    configText.value = active.prizesText || '';
-    termsText.value = active.terms || '';
-    termsBody.textContent = active.terms || '';
-
-    forceSelect.innerHTML = '<option value="">Force Prize (QA)</option>' + SLICES.map((s,i)=>`<option value="${i}">${s.label}</option>`).join('');
-    
-    // Load color settings
-    if(active.colors) {
-      if(active.colors.background) {
-        bgType.value = active.colors.background.type;
-        if(active.colors.background.type === 'color') {
-          bgColor.value = active.colors.background.style;
-        } else if(active.colors.background.type === 'gradient') {
-          // Parse gradient colors (simplified)
-          const match = active.colors.background.style.match(/linear-gradient\([^,]+, ([^,]+), ([^)]+)\)/);
-          if(match) {
-            bgGradient1.value = match[1].trim();
-            bgGradient2.value = match[2].trim();
-          }
-        }
-        updateBackground();
-      }
-      
-      if(active.colors.button) {
-        btnType.value = active.colors.button.type;
-        if(active.colors.button.type === 'color') {
-          btnColor.value = active.colors.button.style;
-        } else if(active.colors.button.type === 'gradient') {
-          const match = active.colors.button.style.match(/linear-gradient\([^,]+, ([^,]+), ([^)]+)\)/);
-          if(match) {
-            btnGradient1.value = match[1].trim();
-            btnGradient2.value = match[2].trim();
-          }
-        }
-        updateButton();
-      }
-    }
-    
-    // Load modal background images
-    if(active.assets.rewardsModal) {
-      // Modal background would be applied when opening rewards modal
-    }
-    if(active.assets.infoModal) {
-      // Modal background would be applied when opening info modal
-    }
-    
-    // Wheel image is automatically handled by the drawWheel function
-    
-    // Update wheel size display
-    updateWheelSizeDisplay();
   }
 
   function setActive(i){ activeIndex=i; active=templates[activeIndex]; SLICES=parseFromText(active.prizesText); refreshTemplateUI(); drawBackground(); drawWheel(true); drawLogo(); showToast('✅ Template loaded'); }
@@ -236,18 +696,52 @@
   async function fileToDataURL(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
   
   // Page Background handlers
-  pageBgFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.bg=await fileToDataURL(f); saveTemplates(); drawBackground(); showToast('🖼️ Page background set'); });
-  pageBgClear.addEventListener('click', ()=>{ active.assets.bg=null; saveTemplates(); drawBackground(); });
+  pageBgFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.bg=await fileToDataURL(f); saveTemplates(); drawBackground(); showToast('🖼️ Page background set'); document.getElementById('pageBgImageHint').style.display='block'; });
+  pageBgClear.addEventListener('click', ()=>{ active.assets.bg=null; saveTemplates(); drawBackground(); document.getElementById('pageBgImageHint').style.display='none'; });
+  
+  // Show/hide page background hint based on type
+  pageBgType.addEventListener('change', ()=>{ 
+    const hint = document.getElementById('pageBgImageHint');
+    if(pageBgType.value === 'image') {
+      hint.style.display = 'block';
+    } else {
+      hint.style.display = 'none';
+    }
+  });
+  
+  // Loading screen handlers
+  const loadingScreenFile = document.getElementById('loadingScreenFile');
+  const loadingScreenClear = document.getElementById('loadingScreenClear');
+  loadingScreenFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.loadingScreen=await fileToDataURL(f); saveTemplates(); showToast('🖼️ Loading screen set'); });
+  loadingScreenClear.addEventListener('click', ()=>{ active.assets.loadingScreen=null; saveTemplates(); hideLoadingScreen(); showToast('🗑️ Loading screen cleared'); });
   
   // Logo handlers
-  logoFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.logo=await fileToDataURL(f); saveTemplates(); drawLogo(); showToast('🖼️ Logo set'); });
-  logoClear.addEventListener('click', ()=>{ active.assets.logo=null; saveTemplates(); drawLogo(); });
+  logoFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.logo=await fileToDataURL(f); saveTemplates(); drawLogo(); drawGameLogo(); showToast('🖼️ Logo set'); });
+  logoClear.addEventListener('click', ()=>{ active.assets.logo=null; saveTemplates(); drawLogo(); drawGameLogo(); });
+  
+  // Game Logo handlers
+  const gameLogoFile = document.getElementById('gameLogoFile');
+  const gameLogoClear = document.getElementById('gameLogoClear');
+  gameLogoFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.gameLogo=await fileToDataURL(f); saveTemplates(); drawGameLogo(); showToast('🖼️ Game logo set'); });
+  gameLogoClear.addEventListener('click', ()=>{ active.assets.gameLogo=null; saveTemplates(); drawGameLogo(); });
   
   
 
   // Wheel Image handlers
   wheelFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.wheel=await fileToDataURL(f); saveTemplates(); drawWheel(true); showToast('🖼️ Wheel image set - Prize weights still work!'); });
   wheelClear.addEventListener('click', ()=>{ active.assets.wheel=null; saveTemplates(); drawWheel(true); });
+  
+  // Hub (center button) handlers
+  hubFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.hub=await fileToDataURL(f); active.assets.spin=active.assets.hub; saveTemplates(); drawWheel(true); showToast('🖼️ Hub/center image set'); });
+  hubClear.addEventListener('click', ()=>{ active.assets.hub=null; active.assets.spin=null; saveTemplates(); drawWheel(true); });
+  
+  // Pointer (arrow) handlers
+  pointerFile.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; active.assets.pointer=await fileToDataURL(f); saveTemplates(); drawWheel(true); showToast('🖼️ Arrow pointer image set'); });
+  pointerClear.addEventListener('click', ()=>{ active.assets.pointer=null; saveTemplates(); drawWheel(true); });
+  
+  // Button color handlers (canvasBtnTextColor and canvasBtnHoverColor handlers set up later)
+  canvasRewardsBtnColor.addEventListener('change', (e)=>{ active.colors.canvasRewardsBtnColor=e.target.value; saveTemplates(); drawTopbar(); });
+  canvasInfoBtnColor.addEventListener('change', (e)=>{ active.colors.canvasInfoBtnColor=e.target.value; saveTemplates(); drawTopbar(); });
 
   // Canvas UI Image handlers
   const canvasRewardsBtnFile = document.getElementById('canvasRewardsBtnFile');
@@ -336,6 +830,9 @@
   canvasSpinBtnColor.addEventListener('change', ()=>{ active.colors.canvasSpinBtn=canvasSpinBtnColor.value; saveTemplates(); drawSpinButton(); });
   canvasSpinBtnHoverColor.addEventListener('change', ()=>{ active.colors.canvasSpinBtnHover=canvasSpinBtnHoverColor.value; saveTemplates(); drawSpinButton(); });
   canvasSpinBtnBorderColor.addEventListener('change', ()=>{ active.colors.canvasSpinBtnBorder=canvasSpinBtnBorderColor.value; saveTemplates(); drawSpinButton(); });
+
+  // Note: Max spins are now controlled by 3rd party backend (URewards)
+  // Use API endpoint: POST /api/gameplay/player/:playerId/spins
 
   // Guaranteed prize event handler
   guaranteedPrize.addEventListener('change', ()=>{ 
@@ -526,12 +1023,24 @@
         color: s.color 
       }));
       
+      // Build designConfig (maxSpins removed - controlled by 3rd party backend)
+      const designConfig = {
+        assets: active.assets || {},
+        colors: active.colors || {},
+        wheelSize: parseFloat(sizeRange.value) || 1.6,
+        ...(active.designConfig || {})
+      };
+      // Remove maxSpins from designConfig as it's now controlled by 3rd party
+      delete designConfig.maxSpins;
+      
       const config = {
+        template: active.name,
         prizes: prizes,
         guaranteedPrize: active.settings?.guaranteedPrize || null,
         guaranteedPrizeEnabled: active.settings?.guaranteedPrizeEnabled || false,
         guaranteedSpinCount: active.settings?.guaranteedSpinCount || 5,
-        guaranteedPrizeSequence: active.settings?.guaranteedPrizeSequence || []
+        guaranteedPrizeSequence: active.settings?.guaranteedPrizeSequence || [],
+        designConfig: designConfig
       };
       
       const response = await fetch(`${MICROSERVICE_GATEWAY}/api/gameplay/config`, {
@@ -792,9 +1301,13 @@
   // Draw layers & sprites ----------------------------------------------------
   const bgSprite = new PIXI.Sprite(); bgLayer.addChild(bgSprite);
   const logoSprite = new PIXI.Sprite(); root.addChild(logoSprite);
-  const base=new PIXI.Graphics(); const rim=new PIXI.Graphics(); const wheel=new PIXI.Container(); const hub=new PIXI.Graphics(); const goText=new PIXI.Text('GO', { fill:'#0e7b55', fontSize:36, fontWeight:'900', fontFamily:'Inter, Arial' }); const spinSprite=new PIXI.Sprite(); const pointer=new PIXI.Graphics(); const dots=new PIXI.Graphics(); const labels=[]; const wheelImageSprite=new PIXI.Sprite(); const hubLayer=new PIXI.Container();
-  // draw order: base/rim (static), wheel (contains wheelImageSprite + slices), dots, hubLayer (static), pointer (static)
-  wheelContainer.addChild(base, rim, wheel, dots, hubLayer, pointer);
+  const gameLogoSprite = new PIXI.Sprite(); root.addChild(gameLogoSprite);
+  const chanceCounterBg = new PIXI.Graphics(); root.addChild(chanceCounterBg);
+  const chanceCounterText = new PIXI.Text('', { fill: 0xffffff, fontSize: 30, fontWeight: 'bold', fontFamily: 'Arial' }); root.addChild(chanceCounterText);
+  const chanceCounterValue = new PIXI.Text('', { fill: 0xffffff, fontSize: 30, fontWeight: 'bold', fontFamily: 'Arial' }); root.addChild(chanceCounterValue);
+  const base=new PIXI.Graphics(); const rim=new PIXI.Graphics(); const wheel=new PIXI.Container(); const hub=new PIXI.Graphics(); const goText=new PIXI.Text('GO', { fill:'#0e7b55', fontSize:36, fontWeight:'900', fontFamily:'Inter, Arial' }); const spinSprite=new PIXI.Sprite(); const pointer=new PIXI.Graphics(); const pointerSprite=new PIXI.Sprite(); const dots=new PIXI.Graphics(); const labels=[]; const wheelImageSprite=new PIXI.Sprite(); const hubLayer=new PIXI.Container();
+  // draw order: base/rim (static), wheel (contains wheelImageSprite + slices), dots, hubLayer (static), pointer (static or sprite)
+  wheelContainer.addChild(base, rim, wheel, dots, hubLayer, pointer, pointerSprite);
   let WHEEL_RADIUS = CONFIG.BASE_RADIUS;
 
   function drawBackground(){
@@ -830,20 +1343,171 @@
     }
   }
   function drawLogo(){ 
-    logoSprite.texture=PIXI.Texture.EMPTY; 
-    if(active.assets.logo){ 
-      logoSprite.texture=PIXI.Texture.from(active.assets.logo); 
-    } 
-    logoSprite.anchor.set?.(0.5,0.5); 
-    const sc=0.4; // Slightly larger scale for better visibility
+    // Only draw if logo asset exists
+    if(!active.assets.logo) {
+      logoSprite.texture = PIXI.Texture.EMPTY;
+      logoSprite.visible = false;
+      return;
+    }
+    
+    logoSprite.texture = PIXI.Texture.from(active.assets.logo);
+    logoSprite.visible = true;
+    logoSprite.anchor.set(0.5, 0.5); 
+    
+    // ===== LOGO SIZE =====
+    // Mobile: smaller, Web: original size
+    const mobile = isMobile();
+    const sc = mobile ? 0.4 : 0.5;  // Mobile: 40%, Web: 50% (smaller for topbar)
+    
     logoSprite.scale.set(sc, sc); 
-    // Position logo with more space above the wheel
-    logoSprite.x = wheelContainer.x; // Center horizontally with wheel
-    logoSprite.y = wheelContainer.y - WHEEL_RADIUS - 140; // More space above the wheel
+    
+    // Position logo at topbar middle right
+    const vw = app.renderer.width;
+    const vh = app.renderer.height;
+    const buttonSize = mobile ? 30 : 35;
+    const gap = mobile ? 8 : 5;
+    const rightMargin = mobile ? 8 : 0;
+    
+    // Calculate top margin (same as topbar)
+    let topMargin;
+    if (mobile) {
+      const safeArea = getSafeAreaInsets();
+      topMargin = Math.max(12, safeArea.top + 8);
+    } else {
+      topMargin = 16;
+    }
+    
+    // Calculate button positions (same as in drawTopbar)
+    const buttonsCount = 3; // Rewards, Info, Sound
+    const rightmostButtonX = vw - rightMargin - (buttonSize + gap) * buttonsCount;
+    const buttonCenterY = topMargin + buttonSize / 2;
+    
+    // Position logo horizontally aligned with spin wheel (same X as wheel)
+    // Wheel is at DESIGN.w/2 in DESIGN coordinates
+    // Convert wheel X position to screen coordinates
+    const wheelXDesign = wheelContainer.x; // Wheel X in DESIGN coordinates
+    const wheelXScreen = root.x + (wheelXDesign * root.scale.x);
+    
+    // Use wheel's X position for logo, but keep Y at topbar level
+    const logoXScreen = wheelXScreen; // Same X as wheel
+    const logoYScreen = buttonCenterY; // Aligned with button centers (middle of topbar)
+    
+    // Convert to DESIGN coordinates
+    logoSprite.x = (logoXScreen - root.x) / root.scale.x;
+    logoSprite.y = (logoYScreen - root.y) / root.scale.y;
+  }
+  
+  function drawGameLogo(){ 
+    gameLogoSprite.texture=PIXI.Texture.EMPTY; 
+    if(active.assets.gameLogo){ 
+      gameLogoSprite.texture=PIXI.Texture.from(active.assets.gameLogo); 
+    } 
+    gameLogoSprite.anchor.set?.(0.5,0.5); 
+    
+    // ===== GAME LOGO SIZE =====
+    // Mobile: smaller, Web: original size
+    const mobile = isMobile();
+    const gameLogoSc = mobile ? 0.35 : 0.5;  // Mobile: 35%, Web: 50%
+    
+    gameLogoSprite.scale.set(gameLogoSc, gameLogoSc); 
+    
+    // Game logo horizontal position - centered by default
+    gameLogoSprite.x = DESIGN.w/2;  // Change this to adjust horizontal position
+    
+    // Game logo vertical position - positioned below the main logo
+    // Calculate position based on main logo position
+    const gameLogoSpacing = mobile ? 15 : 20;  // Mobile: closer, Web: original spacing
+    if(active.assets.logo && logoSprite.texture !== PIXI.Texture.EMPTY){
+      // Position below main logo if it exists
+      gameLogoSprite.y = logoSprite.y + (logoSprite.height * logoSprite.scale.y) / 2 + gameLogoSpacing;
+    } else {
+      // If no main logo, position at same location as main logo would be
+      const logoSpacing = 100;
+      gameLogoSprite.y = wheelContainer.y - WHEEL_RADIUS - logoSpacing;
+    }
+  }
+  
+  function drawChanceCounter() {
+    // Don't show "∞" until we've actually checked the session
+    let chanceText;
+    let isUnlimited = false;
+    if (!sessionChecked) {
+      chanceText = '...'; // Show loading state
+      } else {
+        // Handle NaN case - if remainingSpins is NaN, treat as null (unlimited)
+        if (remainingSpins !== null && remainingSpins !== undefined && !isNaN(remainingSpins)) {
+          chanceText = remainingSpins;
+        } else {
+          chanceText = '∞';
+          isUnlimited = true;
+        }
+      }
+    
+    // Set label text
+    chanceCounterText.text = 'CHANCE: ';
+    chanceCounterText.anchor.set(0, 0.5);
+    
+    // Set value text
+    chanceCounterValue.text = chanceText;
+    chanceCounterValue.anchor.set(0, 0.5);
+    const mobile = isMobile();
+    
+    // Get viewport dimensions for auto-scaling
+    const vw = app.renderer.width;
+    const vh = app.renderer.height;
+    
+    // Auto-scale font size based on screen size (make chance text bigger)
+    let fontSize, valueFontSize;
+    if (mobile) {
+      // Mobile: Make font size bigger, scale with screen width
+      // Base size: 28px for 375px width (larger base)
+      const baseWidth = 375; // iPhone SE width
+      const baseFontSize = 28; // Larger base font size
+      const scaleFactor = Math.min(vw / baseWidth, 1.6); // Scale up to 1.6x for larger screens
+      fontSize = Math.round(baseFontSize * scaleFactor);
+      // Clamp between 24px (very small screens) and 48px (large tablets) - larger max
+      fontSize = Math.max(24, Math.min(48, fontSize));
+      
+      // Value font size (especially for ∞) should be significantly larger
+      if (remainingSpins === null) {
+        valueFontSize = Math.round(fontSize * 1.8); // ∞ symbol 80% larger
+      } else {
+        valueFontSize = Math.round(fontSize * 1.3); // Numbers 30% larger than label
+      }
+    } else {
+      fontSize = 30; // Web: larger size
+      valueFontSize = remainingSpins === null ? 45 : 30; // Web: ∞ larger, numbers same
+    }
+    chanceCounterText.style.fontSize = fontSize;
+    chanceCounterValue.style.fontSize = valueFontSize;
+    
+    // Position below wheel - Mobile: tighter spacing, Web: original spacing
+    const chanceY = wheelContainer.y + WHEEL_RADIUS + (mobile ? 60 : 130);
+    const centerX = DESIGN.w/2;
+    
+    // Calculate total width to center both texts together
+    const labelWidth = chanceCounterText.width;
+    const valueWidth = chanceCounterValue.width;
+    const totalWidth = labelWidth + valueWidth;
+    
+    // Position label and value side by side, centered
+    chanceCounterText.x = centerX - totalWidth / 2;
+    chanceCounterText.y = chanceY;
+    chanceCounterValue.x = centerX - totalWidth / 2 + labelWidth;
+    chanceCounterValue.y = chanceY;
+    
+    // Hide background - no border, no background, just text
+    chanceCounterBg.clear();
   }
 
   function drawWheel(resetRotation=false){
-    WHEEL_RADIUS = CONFIG.BASE_RADIUS * sizeMultiplier * autoMultiplier;
+    // Mobile: Use directly calculated radius (no fixed scale)
+    // Web: Use multiplier method
+    if (calculatedWheelRadius !== null && isMobile()) {
+      WHEEL_RADIUS = calculatedWheelRadius; // Use directly calculated size
+    } else {
+      WHEEL_RADIUS = CONFIG.BASE_RADIUS * sizeMultiplier * autoMultiplier; // Web: original method
+    }
     if(resetRotation) wheel.rotation = 0;
 
     // clear
@@ -852,6 +1516,8 @@
     
     // Update logo position when wheel is redrawn
     drawLogo();
+    drawGameLogo();
+    drawChanceCounter();
 
     // ensure the custom wheel sprite is inside the rotating 'wheel' container
     if(wheelImageSprite.parent !== wheel){ wheelImageSprite.parent?.removeChild(wheelImageSprite); wheel.addChildAt(wheelImageSprite, 0); }
@@ -891,8 +1557,9 @@
 
     // hub (non-rotating)
     const HR = CONFIG.HUB_RADIUS * (WHEEL_RADIUS/CONFIG.BASE_RADIUS);
-    if(active.assets.spin){
-      spinSprite.texture = PIXI.Texture.from(active.assets.spin);
+    if(active.assets.hub || active.assets.spin){
+      const hubAsset = active.assets.hub || active.assets.spin;
+      spinSprite.texture = PIXI.Texture.from(hubAsset);
       spinSprite.anchor.set(0.5);
       const iw = spinSprite.texture.width, ih = spinSprite.texture.height;
       const s = (HR*2) / Math.max(iw, ih);
@@ -904,10 +1571,24 @@
       hubLayer.addChild(hub, goText);
     }
 
-    // pointer (non-rotating)
+    // pointer (non-rotating) - use image if available, otherwise draw
     const baseY = -HR - 6; const tipY  = -HR - 34 * (WHEEL_RADIUS/CONFIG.BASE_RADIUS);
+    if(active.assets.pointer){
+      pointer.clear();
+      pointerSprite.texture = PIXI.Texture.from(active.assets.pointer);
+      pointerSprite.anchor.set(0.5, 1); // Anchor at bottom center
+      const iw = pointerSprite.texture.width, ih = pointerSprite.texture.height;
+      const scale = 1.0; // Adjust scale as needed
+      pointerSprite.scale.set(scale);
+      pointerSprite.x = 0;
+      pointerSprite.y = tipY;
+      pointerSprite.rotation = 0;
+    } else {
+      pointerSprite.texture = PIXI.Texture.EMPTY;
+      pointer.clear();
     pointer.beginFill(0xffee66).drawPolygon([ -14, baseY, 14, baseY, 0, tipY ]).endFill();
     pointer.lineStyle(3,0x8a7a28,1).moveTo(-14, baseY).lineTo(14, baseY).lineTo(0, tipY).lineTo(-14, baseY);
+    }
 
     // dots (decor)
     dots.beginFill(0xffffff,0.9);
@@ -984,9 +1665,9 @@
           soundButton.addChild(sprite);
         }
       } else {
-        // Use text for sound button
+        // Use text for sound button (just emoji, no text)
         if (soundButton.children[0]) {
-          soundButton.children[0].text = (isSoundOn()? '🔊 Sound' : '🔇 Sound');
+          soundButton.children[0].text = (isSoundOn()? '🔊' : '🔇');
         }
       }
     }
@@ -1043,44 +1724,72 @@
   });
 
   // Interactions -------------------------------------------------------------
-  // Only allow touch spin on the wheel area, not the entire canvas
-  app.view.addEventListener('pointerdown', (e)=>{ 
-    if(e.pointerType!=='mouse') {
-      // Check if click is within wheel area (approximate center area)
-      const rect = app.view.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
-      
-      // Only spin if click is within wheel radius (approximate 320px radius for 1.6x scale)
-      if(distance < 320) {
-        spin();
-      }
-    }
-  });
+  // DISABLED: Wheel click-to-spin on mobile - only spin button can trigger spin
+  // app.view.addEventListener('pointerdown', (e)=>{ 
+  //   // Only enable wheel click-to-spin on mobile (touch devices)
+  //   const mobile = isMobile();
+  //   if(mobile && e.pointerType !== 'mouse') {
+  //     // Get click position in screen coordinates
+  //     const rect = app.view.getBoundingClientRect();
+  //     const screenX = e.clientX - rect.left;
+  //     const screenY = e.clientY - rect.top;
+  //     
+  //     // Convert screen coordinates to canvas coordinates (accounting for scaling and positioning)
+  //     const canvasX = (screenX - root.x) / root.scale.x;
+  //     const canvasY = (screenY - root.y) / root.scale.y;
+  //     
+  //     // Get wheel center position in canvas coordinates
+  //     const wheelCenterX = wheelContainer.x;
+  //     const wheelCenterY = wheelContainer.y;
+  //     
+  //     // Calculate distance from click to wheel center
+  //     const distance = Math.sqrt((canvasX - wheelCenterX) ** 2 + (canvasY - wheelCenterY) ** 2);
+  //     
+  //     // Only spin if click is within wheel radius (with some padding for easier tapping)
+  //     const clickRadius = WHEEL_RADIUS + 20; // Add 20px padding for easier mobile tapping
+  //     if(distance < clickRadius && !spinning) {
+  //       spin();
+  //     }
+  //   }
+  // });
   // Modal close handlers
   document.querySelectorAll('.modal-close').forEach(btn=> btn.addEventListener('click', (e)=> closeModal(e.target.getAttribute('data-close'))));
 
    async function spin(){
      if(spinning) return;
      
-     // Set spinning state immediately for instant UI feedback
+     // Clear previous spin result to prevent showing old prize modal
+     spin._result = null;
+     spin._animation = null;
+     
+     // Ensure any open modals are closed
+     hideCanvasCongratsModal();
+     
+     // Quick local check: if we already know we can't spin, return immediately
+     if (remainingSpins !== null && remainingSpins <= 0) {
+       showToast('❌ You have reached your spin limit!');
+       return;
+     }
+     
+     // Set spinning state IMMEDIATELY for instant visual feedback
      spinning = true;
      updateSpinButtonState();
      
      if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
      
-     // Create/get session for microservice tracking (non-blocking)
-     getOrCreateSession().catch(err => console.warn('Session creation failed:', err));
+     // Start audio immediately for instant feedback
+     sfxSpin();
+     
+     // Start prize calculation immediately (client-side) while checks run in parallel
+     // This allows the animation to start without waiting for network calls
+     let chosen;
+     let useGuaranteedPrize = false;
+     let useSequencePrize = null;
      
      // Increment spin count
      spinCount++;
      
-     // Determine which prize to use this spin
-     let useGuaranteedPrize = false;
-     let useSequencePrize = null;
+     // Determine which prize to use this spin (client-side calculation)
      const hasGuaranteedPrize = active.settings?.guaranteedPrize && typeof active.settings.guaranteedPrize === 'string' && active.settings.guaranteedPrize.trim();
      
      if (hasGuaranteedPrize) {
@@ -1102,21 +1811,16 @@
              const sequencePrizeId = sequence[positionInCycle];
              if (sequencePrizeId && typeof sequencePrizeId === 'string' && sequencePrizeId.trim()) {
                useSequencePrize = sequencePrizeId;
-               console.log(`Spin ${spinCount}: Using sequence prize at position ${positionInCycle}: ${useSequencePrize}`);
              } else {
-               // No prize set for this position, use random
                useSequencePrize = null;
-               console.log(`Spin ${spinCount}: No sequence prize at position ${positionInCycle}, using random`);
              }
            } else {
              // Last position in cycle: use guaranteed prize
              useGuaranteedPrize = true;
-             console.log(`Spin ${spinCount}: Using guaranteed prize (position ${positionInCycle} is last in cycle)`);
            }
          } else {
            // No sequence defined: use guaranteed prize only on Nth spin
            useGuaranteedPrize = (spinCount % targetSpin === 0);
-           console.log(`Spin ${spinCount}: No sequence defined, guaranteed prize on spin ${spinCount % targetSpin === 0 ? 'YES' : 'NO'}`);
          }
        } else {
          // Original mode: every spin
@@ -1124,12 +1828,72 @@
        }
      }
      
-     let chosen;
+     // Run async checks in parallel (non-blocking)
+     const canSpinPromise = checkCanSpin().catch(err => {
+       console.warn('Spin limit check failed:', err);
+       return true; // Allow spin if check fails
+     });
      
-     // Use microservice for spin if enabled
-     if (CONFIG.USE_MICROSERVICE_FOR_SPIN) {
+     const sessionPromise = getOrCreateSession().catch(err => {
+       console.warn('Session creation failed:', err);
+     });
+     
+     // Calculate prize immediately (client-side) - don't wait for network
+     if (!CONFIG.USE_MICROSERVICE_FOR_SPIN) {
+       // Client-side calculation (immediate)
+       const guaranteedPrizeId = active.settings?.guaranteedPrize;
+       if (useSequencePrize) {
+         chosen = SLICES.find(slice => slice.id === useSequencePrize);
+         if (!chosen) {
+           chosen = pickWeighted(SLICES, guaranteedPrizeId);
+         }
+       } else if (useGuaranteedPrize) {
+         chosen = SLICES.find(slice => slice.id === active.settings.guaranteedPrize);
+         if (!chosen) {
+           chosen = pickWeighted(SLICES);
+         }
+       } else {
+         // Random selection - exclude guaranteed prize if in enhanced mode
+         const excludeGuaranteed = active.settings?.guaranteedPrizeEnabled && guaranteedPrizeId;
+         chosen = pickWeighted(SLICES, excludeGuaranteed ? guaranteedPrizeId : null);
+       }
+       spin._result = chosen;
+       spin._animation = null;
+       
+       // Start animation immediately
+       const idx = SLICES.indexOf(chosen);
+       const targetCenter = centerAngleForIndex(idx);
+       const fullSpins = (5 + Math.floor(Math.random()*3)) * TWO_PI;
+       const animDuration = 4.25 + Math.random()*0.9;
+       
+       rotStart = wheel.rotation % TWO_PI;
+       rotEnd   = targetCenter + fullSpins;
+       duration = animDuration;
+       t = 0;
+       
+       // Check spin limit in background - if it fails, we'll handle it after spin completes
+       canSpinPromise.then(canSpin => {
+         if (!canSpin) {
+           // If limit reached, we'll show error after spin completes
+           console.warn('Spin limit reached, but spin already started');
+         }
+       });
+     } else {
+       // Using microservice - need to wait for session and API call
+       await sessionPromise;
+       
+       // Wait for spin limit check
+       const canSpin = await canSpinPromise;
+       if (!canSpin) {
+         // Stop the spin if limit reached
+         spinning = false;
+         updateSpinButtonState();
+         showToast('❌ You have reached your spin limit!');
+         return;
+       }
+       
+       // Now make the microservice call
        try {
-         // Filter out guaranteed prize from prizes array if in enhanced mode and doing random selection
          const guaranteedPrizeId = active.settings?.guaranteedPrize;
          const excludeGuaranteed = active.settings?.guaranteedPrizeEnabled && guaranteedPrizeId && !useSequencePrize && !useGuaranteedPrize;
          const prizesToSend = excludeGuaranteed 
@@ -1149,7 +1913,7 @@
            const result = await response.json();
            chosen = SLICES.find(s => s.id === result.prize.id) || result.prize;
            spin._result = chosen;
-           spin._animation = result.animation; // Use server-provided animation params
+           spin._animation = result.animation;
          } else {
            throw new Error('Microservice spin failed');
          }
@@ -1164,28 +1928,6 @@
           chosen = SLICES.find(slice => slice.id === active.settings.guaranteedPrize);
           if (!chosen) chosen = pickWeighted(SLICES);
         } else {
-          // Random selection - exclude guaranteed prize if in enhanced mode
-          const excludeGuaranteed = active.settings?.guaranteedPrizeEnabled && guaranteedPrizeId;
-          chosen = pickWeighted(SLICES, excludeGuaranteed ? guaranteedPrizeId : null);
-        }
-         spin._result = chosen;
-         spin._animation = null;
-       }
-     } else {
-      // Client-side calculation (default)
-      const guaranteedPrizeId = active.settings?.guaranteedPrize;
-      if (useSequencePrize) {
-        chosen = SLICES.find(slice => slice.id === useSequencePrize);
-        if (!chosen) {
-          chosen = pickWeighted(SLICES, guaranteedPrizeId);
-        }
-      } else if (useGuaranteedPrize) {
-        chosen = SLICES.find(slice => slice.id === active.settings.guaranteedPrize);
-        if (!chosen) {
-          chosen = pickWeighted(SLICES);
-        }
-      } else {
-        // Random selection - exclude guaranteed prize if in enhanced mode
         const excludeGuaranteed = active.settings?.guaranteedPrizeEnabled && guaranteedPrizeId;
         chosen = pickWeighted(SLICES, excludeGuaranteed ? guaranteedPrizeId : null);
       }
@@ -1193,10 +1935,9 @@
        spin._animation = null;
      }
      
+       // Start animation
      const idx = SLICES.indexOf(chosen);
      const targetCenter = centerAngleForIndex(idx);
-     
-     // Use animation params from microservice if available
      const animation = spin._animation;
      const fullSpins = animation ? (animation.fullSpins * TWO_PI) : ((5 + Math.floor(Math.random()*3)) * TWO_PI);
      const animDuration = animation ? animation.duration : (4.25 + Math.random()*0.9);
@@ -1204,14 +1945,25 @@
      rotStart = wheel.rotation % TWO_PI;
      rotEnd   = targetCenter + fullSpins;
      duration = animDuration;
-     t = 0; spinning = true;
-     updateSpinButtonState();
-     sfxSpin();
+       t = 0;
+     }
+     
    }
   async function onSpinComplete(){
     spinning = false; // Reset spinning state
     updateSpinButtonState(); // Update button state
+    
+    // Safety check: ensure we have a valid result and it wasn't cleared by a new spin
+    if (!spin._result) {
+      console.warn('Spin completed but no result available (may have been cleared by new spin)');
+      return;
+    }
+    
     const res=spin._result;
+    
+    // Clear the result immediately to prevent it from being reused
+    spin._result = null;
+    
     addHistory({ ts: Date.now(), template: active.name, prize: res.label });
     
     // Celebration effects
@@ -1227,6 +1979,11 @@
         // Ensure session exists
         await getOrCreateSession();
         
+        // Get playerId from URL parameter (if provided by URewards)
+        const urlParams = new URLSearchParams(window.location.search);
+        const playerId = urlParams.get('playerId') || null;
+        
+        console.log('📤 Sending claim to:', CONFIG.API_ENDPOINT);
         const response=await fetch(CONFIG.API_ENDPOINT,{
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ 
@@ -1236,15 +1993,58 @@
             ts: Date.now(), 
             template: active.name,
             sessionId: gameSession?.id,
+            playerId: playerId,  // Pass playerId for spin limit tracking (from URewards)
             prizes: SLICES.map(s => ({ id: s.id, label: s.label, weight: s.weight })) // Send prizes array for probability calculation
           })
         });
-        if(!response.ok) throw new Error('HTTP '+response.status);
+        if(!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
         const result = await response.json();
-        console.log('Prize claimed successfully:', result);
+        console.log('✅ Prize claimed successfully:', result);
+        
+        // Update remaining spins from session or player info
+        if (result.player) {
+          // Use player spin info (from 3rd party backend)
+          // Safely parse remainingSpins from API response
+          if (result.player.remainingSpins !== null && result.player.remainingSpins !== undefined) {
+            const parsed = Number(result.player.remainingSpins);
+            remainingSpins = isNaN(parsed) ? null : parsed;
+          } else {
+            remainingSpins = null;
+          }
+          updateSpinButtonState();
+          
+          if (remainingSpins !== null && remainingSpins <= 0) {
+            showToast('🎉 You\'ve used all your spins!');
+          } else if (remainingSpins !== null) {
+            showToast(`🎉 You won: ${res.label}! (${remainingSpins} spins remaining)`);
+          } else {
+            showToast(`🎉 You won: ${res.label}!`);
+          }
+        } else if (result.session) {
+          // Fallback to session info
+          // Safely parse remainingSpins from API response
+          if (result.session.remainingSpins !== null && result.session.remainingSpins !== undefined) {
+            const parsed = Number(result.session.remainingSpins);
+            remainingSpins = isNaN(parsed) ? null : parsed;
+          } else {
+            remainingSpins = null;
+          }
+          updateSpinButtonState();
+          
+          if (remainingSpins !== null && remainingSpins <= 0) {
+            showToast('🎉 You\'ve used all your spins!');
+          } else if (remainingSpins !== null) {
+            showToast(`🎉 You won: ${res.label}! (${remainingSpins} spins remaining)`);
+          }
+        }
       }catch(err){ 
-        // Silently handle API errors without showing user notification
-        console.warn('API error', err); 
+        // Log API errors for debugging
+        console.error('❌ API error when claiming prize:', err);
+        console.error('   Endpoint:', CONFIG.API_ENDPOINT);
+        console.error('   Error details:', err.message);
       }
     })();
   }
@@ -1368,9 +2168,19 @@
     modalBg.on('pointerdown', () => hideCanvasCongratsModal());
     modalLayer.addChild(modalBg);
     
-    // Create congratulations card
-    const cardWidth = 400;
-    const cardHeight = 300;
+    // Create congratulations card with responsive sizing and margins
+    const mobile = isMobile();
+    let cardWidth, cardHeight;
+    if (mobile) {
+      // Mobile: use 85% of screen width with left/right margins (ensures 7.5% margin on each side)
+      const margin = app.screen.width * 0.075; // 7.5% margin on each side
+      cardWidth = app.screen.width - (margin * 2);
+      cardHeight = 300;
+    } else {
+      // Web: fixed size
+      cardWidth = 400;
+      cardHeight = 300;
+    }
     const cardX = (app.screen.width - cardWidth) / 2;
     const cardY = (app.screen.height - cardHeight) / 2;
     
@@ -1603,53 +2413,94 @@
     
     const vw = app.renderer.width;
     const vh = app.renderer.height;
-    const buttonWidth = 80;
-    const buttonHeight = 35;
-    const gap = 10;
-    const rightMargin = 16;
-    const topMargin = 16;
+    const mobile = isMobile();
+    const buttonSize = mobile ? 30 : 35; // Mobile: smaller buttons, Web: original size
+    const gap = mobile ? 8 : 5; // Mobile: smaller gap, Web: original gap
+    const rightMargin = mobile ? 8 : 0; // Mobile: closer to right edge, Web: closer to right edge
+    
+    // Calculate top margin with safe area insets for iPhone notch/Dynamic Island
+    let topMargin;
+    if (mobile) {
+      const safeArea = getSafeAreaInsets();
+      // Base margin + safe area top (for notch/Dynamic Island)
+      // Add extra padding to ensure buttons are below the status bar
+      topMargin = Math.max(12, safeArea.top + 8); // At least 8px below safe area
+    } else {
+      topMargin = 16; // Web: original margin
+    }
     
     // Get colors from settings
-    const primaryColor = parseInt(active.colors?.canvasBtnPrimary?.replace('#', '') || '17342c', 16);
     const hoverColor = parseInt(active.colors?.canvasBtnHover?.replace('#', '') || '1b3e33', 16);
     const textColor = parseInt(active.colors?.canvasBtnText?.replace('#', '') || 'd9fff2', 16);
     const borderColor = parseInt('23493d', 16);
     
-    // Create buttons with optional images
+    // Create buttons with optional images and per-button colors (always as strings)
     const buttons = [
-      { id: 'btnRewards', text: '🏆 Rewards', action: 'rewards', image: active.assets?.canvasRewardsBtn },
-      { id: 'btnInfo', text: 'ℹ️ Info', action: 'info', image: active.assets?.canvasInfoBtn },
-      { id: 'btnSound', text: '🔊 Sound', action: 'sound', image: active.assets?.canvasSoundUnmute }
+      { 
+        id: 'btnRewards', 
+        text: '🏆 Rewards', 
+        action: 'rewards', 
+        image: active.assets?.canvasRewardsBtn,
+        color: active.colors?.canvasRewardsBtnColor || active.colors?.canvasBtnPrimary || '#17342c'
+      },
+      { 
+        id: 'btnInfo', 
+        text: 'ℹ️ Info', 
+        action: 'info', 
+        image: active.assets?.canvasInfoBtn,
+        color: active.colors?.canvasInfoBtnColor || active.colors?.canvasBtnPrimary || '#17342c'
+      },
+      { 
+        id: 'btnSound', 
+        text: '🔊', 
+        action: 'sound', 
+        image: active.assets?.canvasSoundUnmute,
+        color: active.colors?.canvasBtnPrimary || '#17342c' // Sound button uses default color (as string)
+      }
     ];
     
     buttons.forEach((btn, index) => {
       const button = new PIXI.Graphics();
-      const x = vw - rightMargin - (buttonWidth + gap) * (buttons.length - index);
+      const x = vw - rightMargin - (buttonSize + gap) * (buttons.length - index);
       const y = topMargin;
       
       let text;
       if (btn.image) {
         const sprite = new PIXI.Sprite(PIXI.Texture.from(btn.image));
-        sprite.width = buttonWidth;
-        sprite.height = buttonHeight;
+        sprite.width = buttonSize;
+        sprite.height = buttonSize;
+        sprite.anchor.set(0.5);
+        sprite.x = buttonSize / 2;
+        sprite.y = buttonSize / 2;
         button.addChild(sprite);
       } else {
-        // Draw colored button
-        button.beginFill(primaryColor);
-        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+        // Draw circular button with per-button color
+        let btnColor;
+        if (typeof btn.color === 'string') {
+          btnColor = parseInt(btn.color.replace('#', '') || '17342c', 16);
+        } else if (typeof btn.color === 'number') {
+          btnColor = btn.color;
+        } else {
+          btnColor = parseInt('17342c', 16); // Default color
+        }
+        const goldBorder = parseInt('ffd700', 16); // Gold border like in image
+        button.beginFill(btnColor);
+        button.drawCircle(buttonSize / 2, buttonSize / 2, buttonSize / 2);
         button.endFill();
-        button.lineStyle(1, borderColor);
-        button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
-        // Text label
-        text = new PIXI.Text(btn.text, {
+        button.lineStyle(2, goldBorder);
+        button.drawCircle(buttonSize / 2, buttonSize / 2, buttonSize / 2);
+        // Icon/Text label (smaller for circular button)
+        // For sound button, just show emoji, for others show first part
+        const buttonText = btn.id === 'btnSound' ? btn.text.split(' ')[0] : (btn.text.includes(' ') ? btn.text.split(' ')[0] : btn.text);
+        text = new PIXI.Text(buttonText, {
           fontFamily: 'Arial',
-          fontSize: 12,
+          fontSize: 18,
           fill: textColor,
           fontWeight: 'bold'
         });
         text.anchor.set(0.5);
-        text.x = buttonWidth / 2;
-        text.y = buttonHeight / 2;
+        text.x = buttonSize / 2;
+        text.y = buttonSize / 2;
         button.addChild(text);
       }
       
@@ -1664,20 +2515,30 @@
         button.on('pointerover', () => {
           button.clear();
           button.beginFill(hoverColor);
-          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          const goldBorder = parseInt('ffd700', 16);
+          button.drawCircle(buttonSize / 2, buttonSize / 2, buttonSize / 2);
           button.endFill();
-          button.lineStyle(1, borderColor);
-          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          button.lineStyle(2, goldBorder);
+          button.drawCircle(buttonSize / 2, buttonSize / 2, buttonSize / 2);
           if (text) button.addChild(text);
         });
         
         button.on('pointerout', () => {
           button.clear();
-          button.beginFill(primaryColor);
-          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          let btnColor;
+          if (typeof btn.color === 'string') {
+            btnColor = parseInt(btn.color.replace('#', '') || '17342c', 16);
+          } else if (typeof btn.color === 'number') {
+            btnColor = btn.color;
+          } else {
+            btnColor = parseInt('17342c', 16); // Default color
+          }
+          const goldBorder = parseInt('ffd700', 16);
+          button.beginFill(btnColor);
+          button.drawCircle(buttonSize / 2, buttonSize / 2, buttonSize / 2);
           button.endFill();
-          button.lineStyle(1, borderColor);
-          button.drawRoundedRect(0, 0, buttonWidth, buttonHeight, 10);
+          button.lineStyle(2, goldBorder);
+          button.drawCircle(buttonSize / 2, buttonSize / 2, buttonSize / 2);
           if (text) button.addChild(text);
         });
       }
@@ -1925,10 +2786,14 @@
         spinButton.alpha = 0.5;
         spinButton.interactive = false;
       } else {
-        spinButton.alpha = 1;
-        spinButton.interactive = true;
+        // Check if spins are exhausted
+        const canSpin = remainingSpins === null || remainingSpins > 0;
+        spinButton.alpha = canSpin ? 1 : 0.5;
+        spinButton.interactive = canSpin;
       }
     }
+    // Update chance counter
+    drawChanceCounter();
   }
   
   function drawSpinButton() {
@@ -1941,11 +2806,54 @@
     const vh = app.renderer.height;
     const dpr = window.devicePixelRatio || 1;
     
-    // Button dimensions
-    const buttonWidth = 140 * dpr;
-    const buttonHeight = 50 * dpr;
+    // Detect mobile device
+    const mobile = isMobile();
+    
+    // ===== SPIN BUTTON SIZE =====
+    // Auto-scale button size based on screen size
+    let buttonWidth, buttonHeight;
+    if (mobile) {
+      // Mobile: Make button smaller
+      // Base size: 70px width, 22px height for 375px width (reduced from 100x30)
+      const baseWidth = 375;
+      const baseButtonWidth = 70; // Reduced base width
+      const baseButtonHeight = 22; // Reduced base height
+      const scaleFactor = Math.min(vw / baseWidth, 1.03); // Scale up to only 1.03x (minimal increase)
+      
+      buttonWidth = Math.round(baseButtonWidth * scaleFactor);
+      buttonHeight = Math.round(baseButtonHeight * scaleFactor);
+      
+      // Clamp sizes: min 65x20, max 90x28 (reduced max size)
+      buttonWidth = Math.max(65, Math.min(90, buttonWidth));
+      buttonHeight = Math.max(20, Math.min(28, buttonHeight));
+      
+      // Apply device pixel ratio for high-DPI screens
+      buttonWidth *= dpr;
+      buttonHeight *= dpr;
+    } else {
+      // Web button size (fixed)
+      buttonWidth = 150 * dpr;
+      buttonHeight = 40 * dpr;
+    }
     const buttonX = (vw - buttonWidth) / 2;
-    const buttonY = vh - 150 * dpr; // More space at bottom
+    // Position below chance counter (in screen coordinates)
+    const chanceY = (wheelContainer.y + WHEEL_RADIUS + (mobile ? 80 : 130)) * root.scale.y + root.y;
+    
+    // Mobile: Reduce spacing to minimize space below button
+    // Web: Original spacing
+    let buttonY;
+    if (mobile) {
+      // Position button with spacing that scales with screen size
+      // Base spacing: 40px for 375px width, scales proportionally
+      const baseWidth = 375;
+      const baseSpacing = 40;
+      const spacingScale = Math.min(vw / baseWidth, 1.5);
+      const spacing = Math.round(baseSpacing * spacingScale);
+      const bottomPadding = Math.max(20, getSafeAreaInsets().bottom + 10);
+      buttonY = Math.min(chanceY + spacing, vh - buttonHeight - bottomPadding);
+    } else {
+      buttonY = chanceY + 100; // Web: original spacing
+    }
     
     // Get colors from settings
     const primaryColor = parseInt(active.colors?.canvasSpinBtn?.replace('#', '') || '24d58b', 16);
@@ -1954,6 +2862,9 @@
     
     // Create button graphics
     spinButton = new PIXI.Graphics();
+    
+    // Store text reference for hover handlers
+    let buttonText = null;
     
     // Use image if available, otherwise use colors
     if (active.assets?.canvasSpinBtn) {
@@ -1977,18 +2888,33 @@
       spinButton.endFill();
       
       // Button text (only if no image)
-      const text = new PIXI.Text('SPIN', {
+      // Auto-scale font size based on button size
+      let textFontSize;
+      if (mobile) {
+        // Scale font size proportionally with button size (smaller text)
+        // Base: 12px for 35px button height (reduced from 16px)
+        const baseButtonHeight = 35;
+        const baseFontSize = 12; // Smaller base font size
+        const fontSizeScale = (buttonHeight / dpr) / baseButtonHeight;
+        textFontSize = Math.round(baseFontSize * fontSizeScale);
+        // Clamp between 10px and 18px (reduced from 14-24px)
+        textFontSize = Math.max(10, Math.min(18, textFontSize));
+        textFontSize *= dpr; // Apply DPR
+      } else {
+        textFontSize = 20 * dpr; // Web: original size
+      }
+      buttonText = new PIXI.Text('SPIN', {
         fontFamily: 'Arial, sans-serif',
-        fontSize: 20 * dpr,
+        fontSize: textFontSize,
         fill: 0xffffff,
         fontWeight: 'bold',
         stroke: 0x000000,
         strokeThickness: 1 * dpr
       });
-      text.anchor.set(0.5);
-      text.x = buttonWidth / 2;
-      text.y = buttonHeight / 2;
-      spinButton.addChild(text);
+      buttonText.anchor.set(0.5);
+      buttonText.x = buttonWidth / 2;
+      buttonText.y = buttonHeight / 2;
+      spinButton.addChild(buttonText);
     }
     
     spinButton.x = buttonX;
@@ -2001,7 +2927,7 @@
     const canvas = app.view;
     
     // Hover effects (only if no image)
-    if (!active.assets?.canvasSpinBtn) {
+    if (!active.assets?.canvasSpinBtn && buttonText) {
       spinButton.on('pointerover', () => {
         // Set cursor to pointer
         if (canvas && canvas.style) {
@@ -2017,7 +2943,8 @@
         spinButton.beginFill(0x000000, 0.2);
         spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
         spinButton.endFill();
-        spinButton.addChild(text);
+        // Re-add text after clearing
+        spinButton.addChild(buttonText);
       });
       
       spinButton.on('pointerout', () => {
@@ -2035,7 +2962,8 @@
         spinButton.beginFill(0x000000, 0.2);
         spinButton.drawRoundedRect(2 * dpr, 2 * dpr, buttonWidth, buttonHeight, 14 * dpr);
         spinButton.endFill();
-        spinButton.addChild(text);
+        // Re-add text after clearing
+        spinButton.addChild(buttonText);
       });
     } else {
       // If using image, just set cursor (no visual hover effect)
@@ -2100,6 +3028,10 @@
       canvasBtnPrimaryColor.value = active.colors.canvasBtnPrimary || '#17342c';
       canvasBtnHoverColor.value = active.colors.canvasBtnHover || '#1b3e33';
       canvasBtnTextColor.value = active.colors.canvasBtnText || '#d9fff2';
+      
+      // Per-button colors
+      if (canvasRewardsBtnColor) canvasRewardsBtnColor.value = active.colors.canvasRewardsBtnColor || '#17342c';
+      if (canvasInfoBtnColor) canvasInfoBtnColor.value = active.colors.canvasInfoBtnColor || '#17342c';
       canvasModalBgColor.value = active.colors.canvasModalBg || '#0e1f1a';
       canvasModalBorderColor.value = active.colors.canvasModalBorder || '#204a3e';
       canvasModalTextColor.value = active.colors.canvasModalText || '#e8fff5';
@@ -2163,11 +3095,48 @@
     }
 
     forceSelect.innerHTML = '<option value="">Force Prize (QA)</option>' + SLICES.map((s,i)=>`<option value="${i}">${s.label}</option>`).join('');
+    
+    // Update wheel size display
+    updateWheelSizeDisplay();
+    
     updateSoundButton();
+    
+    // Reset session when template changes
+    gameSession = null;
+    remainingSpins = null;
+    sessionChecked = false;
+    updateSpinButtonState();
+    
+    // Update loading screen
+    if (active.assets?.loadingScreen) {
+      showLoadingScreen();
+    } else {
+      hideLoadingScreen();
+    }
   }
 
   refreshTemplateUI();
     layout();
+    
+    // Initialize session on page load to get actual remaining spins
+    (async () => {
+      try {
+        await getOrCreateSession();
+        // Update chance counter after session is loaded
+        drawChanceCounter();
+        updateSpinButtonState();
+      } catch (err) {
+        console.warn('Failed to initialize session on load:', err);
+      }
+    })();
+    
+    // Show loading screen after everything is initialized
+    if (active?.assets?.loadingScreen) {
+      showLoadingScreen();
+      setTimeout(() => {
+        hideLoadingScreen();
+      }, 800);
+    }
   } catch(err){
     console.error('[Init Error]', err);
     const el=document.getElementById('toast');
@@ -2309,7 +3278,7 @@ function generateStandaloneHTML(templateData) {
     const CONFIG = { API_ENDPOINT: '/api/claim', ENABLE_SFX: true, BASE_RADIUS: 400, HUB_RADIUS: 80 };
   const app = new PIXI.Application({ resizeTo: document.getElementById('game'), backgroundAlpha: 0, antialias: true, autoDensity: true, powerPreference: 'high-performance' });
   document.getElementById('game').appendChild(app.view);
-  const DESIGN = { w: 900, h: 1400 };
+  const DESIGN = { w: 1080, h: 1920 };
   
   const root = new PIXI.Container();
   const bgLayer = new PIXI.Container();
@@ -2347,11 +3316,12 @@ function generateStandaloneHTML(templateData) {
         logoSprite.texture=PIXI.Texture.from(assets.logo); 
       } 
       logoSprite.anchor.set?.(0.5,0.5); 
-      const sc=0.4; // Slightly larger scale for better visibility
+      const sc=0.4;
       logoSprite.scale.set(sc, sc); 
-      // Position logo with more space above the wheel
-      logoSprite.x = wheelContainer.x; // Center horizontally with wheel
-      logoSprite.y = wheelContainer.y - WHEEL_RADIUS - 140; // More space above the wheel
+      // Position logo above the wheel, outside the wheel container
+      const logoSpacing = 100; // Space between logo and top of wheel
+      logoSprite.x = DESIGN.w/2; // Center horizontally
+      logoSprite.y = wheelContainer.y - WHEEL_RADIUS - logoSpacing;
     }
     
     function drawWheel(resetRotation=false){

@@ -10,7 +10,13 @@ const GAMEPLAY_URL = process.env.GAMEPLAY_URL || 'http://localhost:3001';
 const PROBABILITY_URL = process.env.PROBABILITY_URL || 'http://localhost:3002';
 const SYSTEM_URL = process.env.SYSTEM_URL || process.env.MONITORING_URL || process.env.IT_URL || 'http://localhost:3003';
 
-app.use(cors());
+// CORS configuration - allow frontend domain in production
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : '*', // Allow all in development, restrict in production
+  credentials: true
+}));
 app.use(express.json());
 
 // Health check

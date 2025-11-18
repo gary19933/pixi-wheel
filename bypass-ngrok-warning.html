@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bypass Ngrok Warning</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .method {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+            border-radius: 5px;
+        }
+        .method h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .bookmarklet {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .bookmarklet:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔓 Bypass Ngrok Warning Page</h1>
+        <p>Choose one of these methods to bypass the ngrok warning page:</p>
+        
+        <div class="method">
+            <h3>Method 1: Browser Extension (Recommended)</h3>
+            <p>Install a browser extension that adds custom headers:</p>
+            <ul>
+                <li><strong>Chrome/Edge:</strong> "ModHeader" or "Requestly"</li>
+                <li><strong>Firefox:</strong> "Modify Headers" or "Header Editor"</li>
+            </ul>
+            <p>Add header: <code>ngrok-skip-browser-warning: true</code></p>
+        </div>
+        
+        <div class="method">
+            <h3>Method 2: Bookmarklet (Quick Fix)</h3>
+            <p>Drag this button to your bookmarks bar, then click it on the ngrok warning page:</p>
+            <a href="javascript:(function(){fetch(location.href,{headers:{'ngrok-skip-browser-warning':'true'}}).then(r=>r.text()).then(html=>{document.open();document.write(html);document.close()})})();" class="bookmarklet">🔓 Bypass Ngrok Warning</a>
+            <p><small>Or copy this code and paste in browser console:</small></p>
+            <code>fetch(location.href,{headers:{'ngrok-skip-browser-warning':'true'}}).then(r=>r.text()).then(html=>{document.open();document.write(html);document.close()})</code>
+        </div>
+        
+        <div class="method">
+            <h3>Method 3: Custom User-Agent</h3>
+            <p>Set a custom User-Agent in your browser (via DevTools or extension):</p>
+            <p>Any non-standard User-Agent will bypass the warning.</p>
+        </div>
+        
+        <div class="method">
+            <h3>Method 4: Upgrade to Paid Plan</h3>
+            <p>Ngrok paid plans remove the warning page automatically.</p>
+            <p>Visit: <a href="https://ngrok.com/pricing" target="_blank">https://ngrok.com/pricing</a></p>
+        </div>
+    </div>
+</body>
+</html>
+

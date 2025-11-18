@@ -1,6 +1,8 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { UAParser } from 'ua-parser-js';
+import { initDatabase, createTables, db, isDatabaseAvailable } from './db.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -53,16 +55,36 @@ function getDeviceInfo(req) {
   };
 }
 
-// In-memory storage (replace with database in production)
+// In-memory storage (fallback if database not available)
 const gameHistory = [];
 const gameSessions = new Map();
 
+// Initialize database on startup
+(async () => {
+  try {
+    const pool = initDatabase();
+    if (pool) {
+      await createTables();
+      console.log('✅ Using Neon database for storage');
+    } else {
+      console.log('⚠️  Using in-memory storage (DATABASE_URL not set)');
+    }
+  } catch (error) {
+    console.error('❌ Database initialization failed, using in-memory storage:', error.message);
+  }
+})();
+
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'gameplay', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    service: 'gameplay', 
+    database: isDatabaseAvailable() ? 'connected' : 'in-memory',
+    timestamp: new Date().toISOString() 
+  });
 });
 
-// Store game configuration (in production, use database)
+// Store game configuration (in-memory fallback)
 let gameConfig = {
   prizes: [],
   guaranteedPrize: null,
@@ -72,27 +94,29 @@ let gameConfig = {
 };
 
 // Update game configuration endpoint
-app.post('/config', (req, res) => {
+app.post('/config', async (req, res) => {
   try {
     const { prizes, guaranteedPrize, guaranteedPrizeEnabled, guaranteedSpinCount, guaranteedPrizeSequence } = req.body;
     
-    if (prizes && Array.isArray(prizes)) {
-      gameConfig.prizes = prizes;
-    }
-    if (guaranteedPrize !== undefined) {
-      gameConfig.guaranteedPrize = guaranteedPrize;
-    }
-    if (guaranteedPrizeEnabled !== undefined) {
-      gameConfig.guaranteedPrizeEnabled = guaranteedPrizeEnabled;
-    }
-    if (guaranteedSpinCount !== undefined) {
-      gameConfig.guaranteedSpinCount = Math.max(2, Math.min(prizes?.length || 100, guaranteedSpinCount));
-    }
-    if (guaranteedPrizeSequence !== undefined) {
-      gameConfig.guaranteedPrizeSequence = guaranteedPrizeSequence || [];
-    }
+    const configUpdate = {
+      prizes: prizes && Array.isArray(prizes) ? prizes : gameConfig.prizes,
+      guaranteedPrize: guaranteedPrize !== undefined ? guaranteedPrize : gameConfig.guaranteedPrize,
+      guaranteedPrizeEnabled: guaranteedPrizeEnabled !== undefined ? guaranteedPrizeEnabled : gameConfig.guaranteedPrizeEnabled,
+      guaranteedSpinCount: guaranteedSpinCount !== undefined 
+        ? Math.max(2, Math.min(prizes?.length || 100, guaranteedSpinCount)) 
+        : gameConfig.guaranteedSpinCount,
+      guaranteedPrizeSequence: guaranteedPrizeSequence !== undefined ? guaranteedPrizeSequence : gameConfig.guaranteedPrizeSequence
+    };
     
-    res.json({ success: true, config: gameConfig });
+    if (isDatabaseAvailable()) {
+      await db.updateConfig(configUpdate);
+      const updatedConfig = await db.getConfig();
+      res.json({ success: true, config: updatedConfig });
+    } else {
+      // In-memory fallback
+      gameConfig = { ...gameConfig, ...configUpdate };
+      res.json({ success: true, config: gameConfig });
+    }
   } catch (error) {
     console.error('Config update error:', error);
     res.status(500).json({ error: error.message });
@@ -100,11 +124,25 @@ app.post('/config', (req, res) => {
 });
 
 // Get game configuration endpoint
-app.get('/config', (req, res) => {
-  res.json({
-    config: gameConfig,
-    timestamp: new Date().toISOString()
-  });
+app.get('/config', async (req, res) => {
+  try {
+    if (isDatabaseAvailable()) {
+      const config = await db.getConfig();
+      res.json({
+        config: config,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      // In-memory fallback
+      res.json({
+        config: gameConfig,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Config get error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Spin endpoint - receives spin request and returns result
@@ -172,7 +210,8 @@ app.post('/spin', async (req, res) => {
     const prizeIdToUse = useSequencePrize || (useGuaranteedPrize ? guaranteedPrize : null);
 
     // Call probability service to get weighted selection
-    const probabilityResponse = await fetch('http://localhost:3002/select', {
+    const PROBABILITY_URL = process.env.PROBABILITY_URL || 'http://localhost:3002';
+    const probabilityResponse = await fetch(`${PROBABILITY_URL}/select`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -210,9 +249,23 @@ app.post('/spin', async (req, res) => {
     };
 
     // Store in history
-    gameHistory.push(result);
-    if (gameHistory.length > 10000) {
-      gameHistory.shift(); // Keep last 10k spins
+    if (isDatabaseAvailable()) {
+      try {
+        await db.saveSpinResult(result);
+      } catch (dbError) {
+        console.error('Database save error, using in-memory:', dbError);
+        // Fallback to in-memory
+        gameHistory.push(result);
+        if (gameHistory.length > 10000) {
+          gameHistory.shift();
+        }
+      }
+    } else {
+      // In-memory fallback
+      gameHistory.push(result);
+      if (gameHistory.length > 10000) {
+        gameHistory.shift(); // Keep last 10k spins
+      }
     }
 
     res.json(result);
@@ -254,8 +307,19 @@ app.post('/claim', async (req, res) => {
       device: deviceInfo
     };
 
-    // Store claim (in production, save to database)
-    gameHistory.push({ ...claim, type: 'claim' });
+    // Store claim
+    if (isDatabaseAvailable()) {
+      try {
+        await db.saveClaim(claim);
+      } catch (dbError) {
+        console.error('Database save error, using in-memory:', dbError);
+        // Fallback to in-memory
+        gameHistory.push({ ...claim, type: 'claim' });
+      }
+    } else {
+      // In-memory fallback
+      gameHistory.push({ ...claim, type: 'claim' });
+    }
 
     res.json({ success: true, claim });
   } catch (error) {
@@ -265,90 +329,183 @@ app.post('/claim', async (req, res) => {
 });
 
 // Get game history
-app.get('/history', (req, res) => {
-  const { limit = 100, sessionId } = req.query;
-  let history = gameHistory;
-
-  if (sessionId) {
-    history = history.filter(h => h.sessionId === sessionId);
+app.get('/history', async (req, res) => {
+  try {
+    const { limit = 100, sessionId } = req.query;
+    
+    if (isDatabaseAvailable()) {
+      const history = await db.getHistory(parseInt(limit), sessionId || null);
+      res.json({
+        count: history.length,
+        history: history
+      });
+    } else {
+      // In-memory fallback
+      let history = gameHistory;
+      if (sessionId) {
+        history = history.filter(h => h.sessionId === sessionId);
+      }
+      res.json({
+        count: history.length,
+        history: history.slice(-parseInt(limit))
+      });
+    }
+  } catch (error) {
+    console.error('History get error:', error);
+    res.status(500).json({ error: error.message });
   }
-
-  res.json({
-    count: history.length,
-    history: history.slice(-parseInt(limit))
-  });
 });
 
 // Get game statistics
-app.get('/stats', (req, res) => {
-  const spins = gameHistory.filter(h => h.prize);
-  const claims = gameHistory.filter(h => h.type === 'claim');
-  
-  // Device statistics
-  const deviceStats = {
-    byDeviceType: {},
-    byOS: {},
-    byBrowser: {},
-    byApp: { app: 0, web: 0 }
-  };
-  
-  [...spins, ...claims].forEach(entry => {
-    if (entry.device) {
-      // Count by device type
-      const deviceType = entry.device.device?.type || 'unknown';
-      deviceStats.byDeviceType[deviceType] = (deviceStats.byDeviceType[deviceType] || 0) + 1;
+app.get('/stats', async (req, res) => {
+  try {
+    let stats;
+    
+    if (isDatabaseAvailable()) {
+      // Get basic stats from database
+      const dbStats = await db.getStats();
       
-      // Count by OS
-      const osName = entry.device.os?.name || 'unknown';
-      deviceStats.byOS[osName] = (deviceStats.byOS[osName] || 0) + 1;
+      // Get device stats from database
+      const history = await db.getHistory(10000); // Get large sample for stats
       
-      // Count by browser
-      const browserName = entry.device.browser?.name || 'unknown';
-      deviceStats.byBrowser[browserName] = (deviceStats.byBrowser[browserName] || 0) + 1;
+      const deviceStats = {
+        byDeviceType: {},
+        byOS: {},
+        byBrowser: {},
+        byApp: { app: 0, web: 0 }
+      };
       
-      // Count app vs web
-      if (entry.device.isApp) {
-        deviceStats.byApp.app++;
-      } else {
-        deviceStats.byApp.web++;
-      }
+      history.forEach(entry => {
+        if (entry.device && typeof entry.device === 'object') {
+          const device = entry.device;
+          // Count by device type
+          const deviceType = device.device?.type || 'unknown';
+          deviceStats.byDeviceType[deviceType] = (deviceStats.byDeviceType[deviceType] || 0) + 1;
+          
+          // Count by OS
+          const osName = device.os?.name || 'unknown';
+          deviceStats.byOS[osName] = (deviceStats.byOS[osName] || 0) + 1;
+          
+          // Count by browser
+          const browserName = device.browser?.name || 'unknown';
+          deviceStats.byBrowser[browserName] = (deviceStats.byBrowser[browserName] || 0) + 1;
+          
+          // Count app vs web
+          if (device.isApp) {
+            deviceStats.byApp.app++;
+          } else {
+            deviceStats.byApp.web++;
+          }
+        }
+      });
+      
+      stats = {
+        totalSpins: dbStats.totalSpins,
+        totalClaims: dbStats.totalClaims,
+        activeSessions: dbStats.activeSessions,
+        deviceStats: deviceStats,
+        timestamp: new Date().toISOString()
+      };
+    } else {
+      // In-memory fallback
+      const spins = gameHistory.filter(h => h.prize);
+      const claims = gameHistory.filter(h => h.type === 'claim');
+      
+      const deviceStats = {
+        byDeviceType: {},
+        byOS: {},
+        byBrowser: {},
+        byApp: { app: 0, web: 0 }
+      };
+      
+      [...spins, ...claims].forEach(entry => {
+        if (entry.device) {
+          const deviceType = entry.device.device?.type || 'unknown';
+          deviceStats.byDeviceType[deviceType] = (deviceStats.byDeviceType[deviceType] || 0) + 1;
+          
+          const osName = entry.device.os?.name || 'unknown';
+          deviceStats.byOS[osName] = (deviceStats.byOS[osName] || 0) + 1;
+          
+          const browserName = entry.device.browser?.name || 'unknown';
+          deviceStats.byBrowser[browserName] = (deviceStats.byBrowser[browserName] || 0) + 1;
+          
+          if (entry.device.isApp) {
+            deviceStats.byApp.app++;
+          } else {
+            deviceStats.byApp.web++;
+          }
+        }
+      });
+      
+      stats = {
+        totalSpins: spins.length,
+        totalClaims: claims.length,
+        activeSessions: gameSessions.size,
+        deviceStats: deviceStats,
+        timestamp: new Date().toISOString()
+      };
     }
-  });
-  
-  const stats = {
-    totalSpins: spins.length,
-    totalClaims: claims.length,
-    activeSessions: gameSessions.size,
-    deviceStats: deviceStats,
-    timestamp: new Date().toISOString()
-  };
 
-  res.json(stats);
+    res.json(stats);
+  } catch (error) {
+    console.error('Stats get error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Create game session
-app.post('/session', (req, res) => {
-  const deviceInfo = getDeviceInfo(req);
-  const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const session = {
-    id: sessionId,
-    createdAt: new Date().toISOString(),
-    spins: 0,
-    claims: [],
-    device: deviceInfo
-  };
+app.post('/session', async (req, res) => {
+  try {
+    const deviceInfo = getDeviceInfo(req);
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const session = {
+      id: sessionId,
+      createdAt: new Date().toISOString(),
+      spins: 0,
+      claims: [],
+      device: deviceInfo
+    };
 
-  gameSessions.set(sessionId, session);
-  res.json(session);
+    if (isDatabaseAvailable()) {
+      try {
+        await db.saveSession(session);
+      } catch (dbError) {
+        console.error('Database save error, using in-memory:', dbError);
+        // Fallback to in-memory
+        gameSessions.set(sessionId, session);
+      }
+    } else {
+      // In-memory fallback
+      gameSessions.set(sessionId, session);
+    }
+
+    res.json(session);
+  } catch (error) {
+    console.error('Session create error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Get session info
-app.get('/session/:sessionId', (req, res) => {
-  const session = gameSessions.get(req.params.sessionId);
-  if (!session) {
-    return res.status(404).json({ error: 'Session not found' });
+app.get('/session/:sessionId', async (req, res) => {
+  try {
+    let session;
+    
+    if (isDatabaseAvailable()) {
+      session = await db.getSession(req.params.sessionId);
+    } else {
+      // In-memory fallback
+      session = gameSessions.get(req.params.sessionId);
+    }
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    res.json(session);
+  } catch (error) {
+    console.error('Session get error:', error);
+    res.status(500).json({ error: error.message });
   }
-  res.json(session);
 });
 
 const server = app.listen(PORT, () => {

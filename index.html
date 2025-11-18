@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
   <title>PixiJS Spin Wheel – Templates + User Assets (Floating Panel)</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://unpkg.com/pixi.js@7.4.0/dist/pixi.min.js"></script>
@@ -31,6 +31,16 @@
         <button id="tplDelete" class="btn-sm btn-ghost">Delete</button>
       </div>
 
+      <h3>Loading Screen</h3>
+      <div class="element-section">
+        <div class="row">
+          <label>Loading Screen Image</label>
+          <input id="loadingScreenFile" type="file" accept="image/*">
+          <button id="loadingScreenClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="subtle">⏳ Displayed while the spin wheel is loading.<br><strong>Recommended Size:</strong> 1920×1080px (Full HD) or 1080×1920px (Portrait)</div>
+      </div>
+
       <h3>Logo</h3>
       <div class="element-section">
         <div class="row">
@@ -38,6 +48,17 @@
           <input id="logoFile" type="file" accept="image/*">
           <button id="logoClear" class="btn-sm btn-ghost">Clear</button>
         </div>
+        <div class="subtle">🖼️ Logo displayed above the wheel.<br><strong>Recommended Size:</strong> 400×200px (2:1 ratio) or square 300×300px</div>
+      </div>
+
+      <h3>Game Logo</h3>
+      <div class="element-section">
+        <div class="row">
+          <label>Image</label>
+          <input id="gameLogoFile" type="file" accept="image/*">
+          <button id="gameLogoClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="subtle">🖼️ Game logo displayed below the main logo.<br><strong>Recommended Size:</strong> 400×200px (2:1 ratio) or square 300×300px</div>
       </div>
 
       <h3>Page Background</h3>
@@ -72,6 +93,7 @@
           <input id="pageBgFile" type="file" accept="image/*">
           <button id="pageBgClear" class="btn-sm btn-ghost">Clear</button>
         </div>
+        <div class="subtle" id="pageBgImageHint" style="display:none;">🖼️ Background image for the entire page.<br><strong>Recommended Size:</strong> 1920×1080px (Full HD) or 1080×1920px (Portrait)</div>
       </div>
 
 
@@ -100,38 +122,72 @@
         <input type="url" id="claimUrl" placeholder="https://example.com/claim">
       </div>
       
-      <h3>Wheel Image</h3>
+      <h3>Wheel Design</h3>
       <div class="element-section">
         <div class="row">
-          <label>Wheel Background</label>
+          <label>Wheel Image</label>
           <input id="wheelFile" type="file" accept="image/*">
           <button id="wheelClear" class="btn-sm btn-ghost">Clear</button>
         </div>
-        <div class="subtle">💡 Upload a wheel image to use as background. Prize weights will still work correctly!</div>
+        <div class="subtle">💡 Upload a wheel image to use as background. Prize weights will still work correctly!<br><strong>Recommended Size:</strong> 800×800px (Square, 1:1 ratio) - will scale automatically</div>
+        
+        <div class="row">
+          <label>Wheel Center (Hub) Image</label>
+          <input id="hubFile" type="file" accept="image/*">
+          <button id="hubClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="subtle">💡 Center button image (replaces "GO" text)<br><strong>Recommended Size:</strong> 160×160px (Square, 1:1 ratio)</div>
+        
+        <div class="row">
+          <label>Arrow Pointer Image</label>
+          <input id="pointerFile" type="file" accept="image/*">
+          <button id="pointerClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="subtle">💡 Arrow/pointer image at top of wheel (replaces default arrow)<br><strong>Recommended Size:</strong> 60×80px (Portrait, pointing up) or 80×60px (Landscape)</div>
       </div>
 
       <h3>Canvas UI Elements</h3>
       <div class="element-section">
-        <div class="sublabel">Topbar Buttons</div>
+        <div class="sublabel">Topbar Buttons (Image or Color)</div>
         <div class="row">
           <label>Rewards Button</label>
           <input id="canvasRewardsBtnFile" type="file" accept="image/*">
           <button id="canvasRewardsBtnClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="subtle"><strong>Recommended Size:</strong> 80×35px (matches default button size)</div>
+        <div class="row">
+          <label>Rewards Button Color (if no image)</label>
+          <input id="canvasRewardsBtnColor" type="color" value="#17342c">
         </div>
         <div class="row">
           <label>Info Button</label>
           <input id="canvasInfoBtnFile" type="file" accept="image/*">
           <button id="canvasInfoBtnClear" class="btn-sm btn-ghost">Clear</button>
         </div>
+        <div class="subtle"><strong>Recommended Size:</strong> 80×35px (matches default button size)</div>
+        <div class="row">
+          <label>Info Button Color (if no image)</label>
+          <input id="canvasInfoBtnColor" type="color" value="#17342c">
+        </div>
         <div class="row">
           <label>Sound Button (Unmute)</label>
           <input id="canvasSoundUnmuteFile" type="file" accept="image/*">
           <button id="canvasSoundUnmuteClear" class="btn-sm btn-ghost">Clear</button>
         </div>
+        <div class="subtle"><strong>Recommended Size:</strong> 80×35px (matches default button size)</div>
         <div class="row">
           <label>Sound Button (Mute)</label>
           <input id="canvasSoundMuteFile" type="file" accept="image/*">
           <button id="canvasSoundMuteClear" class="btn-sm btn-ghost">Clear</button>
+        </div>
+        <div class="subtle"><strong>Recommended Size:</strong> 80×35px (matches default button size)</div>
+        <div class="row">
+          <label>Button Text Color</label>
+          <input id="canvasBtnTextColor" type="color" value="#d9fff2">
+        </div>
+        <div class="row">
+          <label>Button Hover Color</label>
+          <input id="canvasBtnHoverColor" type="color" value="#1b3e33">
         </div>
       </div>
 
@@ -142,6 +198,7 @@
           <input id="canvasSpinBtnFile" type="file" accept="image/*">
           <button id="canvasSpinBtnClear" class="btn-sm btn-ghost">Clear</button>
         </div>
+        <div class="subtle">🎯 Spin button at the bottom of the screen.<br><strong>Recommended Size:</strong> 200×60px (Landscape, 3.3:1 ratio)</div>
       </div>
 
       <div class="element-section">
@@ -151,31 +208,37 @@
           <input id="canvasRewardsModalFile" type="file" accept="image/*">
           <button id="canvasRewardsModalClear" class="btn-sm btn-ghost">Clear</button>
         </div>
+        <div class="subtle"><strong>Recommended Size:</strong> 720×600px (Modal size, will scale)</div>
         <div class="row">
           <label>Rewards Close Button</label>
           <input id="canvasRewardsCloseFile" type="file" accept="image/*">
           <button id="canvasRewardsCloseClear" class="btn-sm btn-ghost">Clear</button>
         </div>
+        <div class="subtle"><strong>Recommended Size:</strong> 24×24px (Square, small close icon)</div>
         <div class="row">
           <label>Info Modal</label>
           <input id="canvasInfoModalFile" type="file" accept="image/*">
           <button id="canvasInfoModalClear" class="btn-sm btn-ghost">Clear</button>
         </div>
+        <div class="subtle"><strong>Recommended Size:</strong> 720×600px (Modal size, will scale)</div>
         <div class="row">
           <label>Info Close Button</label>
           <input id="canvasInfoCloseFile" type="file" accept="image/*">
           <button id="canvasInfoCloseClear" class="btn-sm btn-ghost">Clear</button>
         </div>
+        <div class="subtle"><strong>Recommended Size:</strong> 24×24px (Square, small close icon)</div>
         <div class="row">
           <label>Congratulations Modal</label>
           <input id="canvasCongratsModalFile" type="file" accept="image/*">
           <button id="canvasCongratsModalClear" class="btn-sm btn-ghost">Clear</button>
         </div>
+        <div class="subtle"><strong>Recommended Size:</strong> 720×600px (Modal size, will scale)</div>
         <div class="row">
           <label>Congratulations Close Button</label>
           <input id="canvasCongratsCloseFile" type="file" accept="image/*">
           <button id="canvasCongratsCloseClear" class="btn-sm btn-ghost">Clear</button>
         </div>
+        <div class="subtle"><strong>Recommended Size:</strong> 24×24px (Square, small close icon)</div>
       </div>
 
       <h3>Canvas Colors & Styling</h3>
@@ -242,6 +305,11 @@
         <button id="addBtn" class="btn-sm">Add</button>
       </div>
 
+      <div class="subtle" style="margin-top: 10px; padding: 10px; background: #1a2e28; border-radius: 5px;">
+        <strong>ℹ️ Spin Limits:</strong> Spin limits per player are controlled by your 3rd party backend (URewards). 
+        Use the API endpoint <code>/api/gameplay/player/:playerId/spins</code> to set/get player spin limits.
+      </div>
+
       <h3>Prize Control</h3>
       <div class="element-section">
         <div class="row">
@@ -303,6 +371,6 @@
   </button>
   
 
-  <script src="script.js"></script>
+  <script type="module" src="script.js"></script>
   </body>
 </html>

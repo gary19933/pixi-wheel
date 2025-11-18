@@ -7,10 +7,17 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "backend": "cd backend && npm start",
+    "backend:dev": "cd backend && npm run dev",
+    "backend:test": "cd backend && npm test",
+    "test:full": "node test-full-stack.js",
     "services:install": "cd services/gateway && npm install && cd ../gameplay && npm install && cd ../probability && npm install && cd ../system && npm install",
     "services:check": "node services/check-ports.js",
     "services:kill": "node services/kill-ports.js",
-    "services:start": "node services/start-all.js"
+    "services:start": "node services/start-all.js",
+    "ngrok": "node start-ngrok.js",
+    "ngrok:setup": "node setup-ngrok-auth.js",
+    "ngrok:bypass": "node setup-ngrok-bypass.js"
   },
   "devDependencies": {
     "vite": "^7.1.7"
