@@ -176,6 +176,7 @@ export async function createTables() {
         spin_count INTEGER,
         used_sequence BOOLEAN DEFAULT false,
         used_guaranteed BOOLEAN DEFAULT false,
+        config_snapshot JSONB,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
@@ -254,6 +255,7 @@ export async function createTables() {
         guaranteed_spin_count INTEGER DEFAULT 5,
         guaranteed_prize_sequence JSONB DEFAULT '[]'::jsonb,
         design_config JSONB DEFAULT '{}'::jsonb,
+        terms_and_conditions TEXT,
         updated_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(template_id, template_name)
       )
@@ -299,11 +301,19 @@ export const db = {
     if (!pool) return null;
     
     try {
+      // Create config snapshot from result
+      const configSnapshot = {
+        guaranteedPrize: result.guaranteedPrize || null,
+        guaranteedPrizeEnabled: result.guaranteedPrizeEnabled !== undefined ? result.guaranteedPrizeEnabled : null,
+        guaranteedSpinCount: result.guaranteedSpinCount || null,
+        guaranteedPrizeSequence: result.guaranteedPrizeSequence || null
+      };
+      
       const query = `
         INSERT INTO game_history 
         (session_id, prize_id, prize_label, weight, probability, timestamp, 
-         device_info, type, animation, spin_count, used_sequence, used_guaranteed)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         device_info, type, animation, spin_count, used_sequence, used_guaranteed, config_snapshot)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id
       `;
       
@@ -319,7 +329,8 @@ export const db = {
         JSON.stringify(result.animation || {}),
         result.spinCount || null,
         result.usedSequence || false,
-        result.usedGuaranteed || false
+        result.usedGuaranteed || false,
+        JSON.stringify(configSnapshot)
       ];
 
       const res = await pool.query(query, values);
@@ -436,6 +447,16 @@ export const db = {
           }
         }
         
+        // Parse config_snapshot if it's a string
+        let configSnapshot = row.config_snapshot;
+        if (typeof configSnapshot === 'string') {
+          try {
+            configSnapshot = JSON.parse(configSnapshot);
+          } catch (e) {
+            configSnapshot = null;
+          }
+        }
+        
         return {
           id: row.id,
           sessionId: row.session_id,
@@ -454,7 +475,8 @@ export const db = {
           animation: animation,
           spinCount: row.spin_count,
           usedSequence: row.used_sequence,
-          usedGuaranteed: row.used_guaranteed
+          usedGuaranteed: row.used_guaranteed,
+          configSnapshot: configSnapshot
         };
       });
     } catch (error) {
@@ -552,14 +574,82 @@ export const db = {
     if (!pool) return null;
     
     try {
-      await pool.query(
-        'UPDATE game_sessions SET player_id = $1 WHERE id = $2',
+      const res = await pool.query(
+        'UPDATE game_sessions SET player_id = $1 WHERE id = $2 RETURNING *',
         [playerId, sessionId]
       );
-      return true;
+      return res.rows[0] || true;
     } catch (error) {
       console.error('Error updating session playerId:', error);
       return false;
+    }
+  },
+
+  // Get sessions by player ID
+  async getSessionsByPlayerId(playerId, template = null) {
+    if (!pool) return [];
+    
+    try {
+      let query, values;
+      if (template) {
+        query = 'SELECT * FROM game_sessions WHERE player_id = $1 AND template = $2 ORDER BY created_at DESC';
+        values = [playerId, template];
+      } else {
+        query = 'SELECT * FROM game_sessions WHERE player_id = $1 ORDER BY created_at DESC';
+        values = [playerId];
+      }
+      
+      const res = await pool.query(query, values);
+      return res.rows.map(row => ({
+        id: row.id,
+        createdAt: row.created_at,
+        spins: row.spins || 0,
+        maxSpins: row.max_spins,
+        remainingSpins: row.max_spins ? Math.max(0, row.max_spins - (row.spins || 0)) : null,
+        claims: row.claims || [],
+        device: row.device_info,
+        template: row.template,
+        playerId: row.player_id
+      }));
+    } catch (error) {
+      console.error('Error getting sessions by playerId:', error);
+      return [];
+    }
+  },
+
+  // Get player's current/active session (most recent)
+  async getPlayerActiveSession(playerId, template = null) {
+    if (!pool) return null;
+    
+    try {
+      let query, values;
+      if (template) {
+        query = 'SELECT * FROM game_sessions WHERE player_id = $1 AND template = $2 ORDER BY created_at DESC LIMIT 1';
+        values = [playerId, template];
+      } else {
+        query = 'SELECT * FROM game_sessions WHERE player_id = $1 ORDER BY created_at DESC LIMIT 1';
+        values = [playerId];
+      }
+      
+      const res = await pool.query(query, values);
+      
+      if (res.rows.length === 0) return null;
+      
+      const row = res.rows[0];
+      return {
+        id: row.id,
+        createdAt: row.created_at,
+        spins: row.spins || 0,
+        maxSpins: row.max_spins,
+        remainingSpins: row.max_spins ? Math.max(0, row.max_spins - (row.spins || 0)) : null,
+        claims: row.claims || [],
+        device: row.device_info,
+        template: row.template,
+        playerId: row.player_id
+      };
+    } catch (error) {
+      console.error('Error getting player active session:', error);
+      return null;
     }
   },
 
@@ -604,7 +694,8 @@ export const db = {
           guaranteedPrizeEnabled: false,
           guaranteedSpinCount: 5,
           guaranteedPrizeSequence: [],
-          designConfig: {}
+          designConfig: {},
+          termsAndConditions: null
         };
       }
       
@@ -616,7 +707,8 @@ export const db = {
         guaranteedPrizeEnabled: row.guaranteed_prize_enabled || false,
         guaranteedSpinCount: row.guaranteed_spin_count || 5,
         guaranteedPrizeSequence: row.guaranteed_prize_sequence || [],
-        designConfig: row.design_config || {}
+        designConfig: row.design_config || {},
+        termsAndConditions: row.terms_and_conditions || null
       };
     } catch (error) {
       console.error('Error getting config:', error);
@@ -658,8 +750,8 @@ export const db = {
       const query = `
         INSERT INTO game_config (template_id, template_name, prizes, guaranteed_prize, 
                                 guaranteed_prize_enabled, guaranteed_spin_count, 
-                                guaranteed_prize_sequence, design_config, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                                guaranteed_prize_sequence, design_config, terms_and_conditions, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
         ON CONFLICT (template_id, template_name) DO UPDATE
         SET prizes = $3,
             guaranteed_prize = $4,
@@ -667,6 +759,7 @@ export const db = {
             guaranteed_spin_count = $6,
             guaranteed_prize_sequence = $7,
             design_config = $8,
+            terms_and_conditions = $9,
             updated_at = NOW()
         RETURNING *
       `;
@@ -679,7 +772,8 @@ export const db = {
         config.guaranteedPrizeEnabled || false,
         config.guaranteedSpinCount || 5,
         JSON.stringify(config.guaranteedPrizeSequence || []),
-        JSON.stringify(config.designConfig || {})
+        JSON.stringify(config.designConfig || {}),
+        config.termsAndConditions || null
       ];
 
       const res = await pool.query(query, values);

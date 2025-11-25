@@ -17,7 +17,8 @@
     "services:start": "node services/start-all.js",
     "ngrok": "node start-ngrok.js",
     "ngrok:setup": "node setup-ngrok-auth.js",
-    "ngrok:bypass": "node setup-ngrok-bypass.js"
+    "ngrok:bypass": "node setup-ngrok-bypass.js",
+    "demo": "node start-demo.js"
   },
   "devDependencies": {
     "vite": "^7.1.7"

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Data Viewer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #4CAF50;
+      margin-bottom: 20px;
+    }
+    .controls {
+      background: #2a2a2a;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    input, select, button {
+      padding: 10px 15px;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #333;
+      color: #e0e0e0;
+      font-size: 14px;
+    }
+    button {
+      background: #4CAF50;
+      border: none;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    button.secondary {
+      background: #2196F3;
+    }
+    button.secondary:hover {
+      background: #0b7dda;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: #2a2a2a;
+      padding: 20px;
+      border-radius: 8px;
+      border-left: 4px solid #4CAF50;
+    }
+    .stat-card h3 {
+      color: #888;
+      font-size: 12px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .stat-card .value {
+      font-size: 32px;
+      font-weight: bold;
+      color: #4CAF50;
+    }
+    .data-section {
+      background: #2a2a2a;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .data-section h2 {
+      color: #4CAF50;
+      margin-bottom: 15px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #444;
+    }
+    th {
+      background: #333;
+      color: #4CAF50;
+      font-weight: 600;
+    }
+    tr:hover {
+      background: #333;
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #888;
+    }
+    .error {
+      background: #f44336;
+      color: white;
+      padding: 15px;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+    .success {
+      background: #4CAF50;
+      color: white;
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+    .json-view {
+      background: #1a1a1a;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .refresh-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: #4CAF50;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .refresh-btn:hover {
+      background: #45a049;
+      transform: scale(1.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎮 Game Data Viewer</h1>
+    
+    <div class="controls">
+      <input type="text" id="gatewayUrl" placeholder="Gateway URL (e.g., https://xxx.ngrok-free.app)" style="flex: 1; min-width: 300px;">
+      <button onclick="setGatewayUrl()">Set URL</button>
+      <button onclick="loadStats()" class="secondary">📊 Load Stats</button>
+      <button onclick="loadHistory()" class="secondary">📜 Load History</button>
+      <select id="limitSelect">
+        <option value="10">Last 10</option>
+        <option value="50" selected>Last 50</option>
+        <option value="100">Last 100</option>
+        <option value="500">Last 500</option>
+      </select>
+    </div>
+
+    <div id="message"></div>
+
+    <div id="statsSection" style="display: none;">
+      <div class="stats-grid" id="statsGrid"></div>
+    </div>
+
+    <div class="data-section" id="historySection" style="display: none;">
+      <h2>Game History</h2>
+      <div id="historyTable"></div>
+    </div>
+
+    <div class="data-section" id="rawDataSection" style="display: none;">
+      <h2>Raw JSON Data</h2>
+      <button onclick="toggleRawData()" style="margin-bottom: 10px;">Toggle Raw Data</button>
+      <div id="rawData" class="json-view" style="display: none;"></div>
+    </div>
+  </div>
+
+  <button class="refresh-btn" onclick="refreshAll()" title="Refresh All">🔄</button>
+
+  <script>
+    let gatewayUrl = '';
+    let currentData = null;
+
+    // Try to get URL from localStorage or prompt
+    window.addEventListener('DOMContentLoaded', () => {
+      const saved = localStorage.getItem('gatewayUrl');
+      if (saved) {
+        document.getElementById('gatewayUrl').value = saved;
+        gatewayUrl = saved;
+      } else {
+        // Try to detect from current page
+        const currentHost = window.location.hostname;
+        if (currentHost.includes('ngrok')) {
+          gatewayUrl = window.location.origin.replace(/^https?:\/\//, 'https://');
+          document.getElementById('gatewayUrl').value = gatewayUrl;
+        }
+      }
+    });
+
+    function setGatewayUrl() {
+      gatewayUrl = document.getElementById('gatewayUrl').value.trim();
+      if (!gatewayUrl) {
+        showMessage('Please enter a Gateway URL', 'error');
+        return;
+      }
+      if (!gatewayUrl.startsWith('http')) {
+        gatewayUrl = 'https://' + gatewayUrl;
+        document.getElementById('gatewayUrl').value = gatewayUrl;
+      }
+      localStorage.setItem('gatewayUrl', gatewayUrl);
+      showMessage('Gateway URL set!', 'success');
+    }
+
+    function showMessage(text, type = 'info') {
+      const msgDiv = document.getElementById('message');
+      msgDiv.className = type;
+      msgDiv.textContent = text;
+      msgDiv.style.display = 'block';
+      setTimeout(() => {
+        msgDiv.style.display = 'none';
+      }, 3000);
+    }
+
+    async function loadStats() {
+      if (!gatewayUrl) {
+        showMessage('Please set Gateway URL first', 'error');
+        return;
+      }
+
+      try {
+        showMessage('Loading stats...', 'info');
+        const response = await fetch(`${gatewayUrl}/api/gameplay/stats`, {
+          headers: {
+            'ngrok-skip-browser-warning': 'true'
+          }
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const data = await response.json();
+        currentData = data;
+        displayStats(data);
+        showMessage('Stats loaded successfully!', 'success');
+      } catch (error) {
+        showMessage(`Error loading stats: ${error.message}`, 'error');
+        console.error('Stats error:', error);
+      }
+    }
+
+    function displayStats(stats) {
+      const grid = document.getElementById('statsGrid');
+      grid.innerHTML = `
+        <div class="stat-card">
+          <h3>Total Spins</h3>
+          <div class="value">${stats.totalSpins || 0}</div>
+        </div>
+        <div class="stat-card">
+          <h3>Total Claims</h3>
+          <div class="value">${stats.totalClaims || 0}</div>
+        </div>
+        <div class="stat-card">
+          <h3>Active Sessions</h3>
+          <div class="value">${stats.activeSessions || 0}</div>
+        </div>
+        <div class="stat-card">
+          <h3>App Users</h3>
+          <div class="value">${stats.deviceStats?.byApp?.app || 0}</div>
+        </div>
+        <div class="stat-card">
+          <h3>Web Users</h3>
+          <div class="value">${stats.deviceStats?.byApp?.web || 0}</div>
+        </div>
+      `;
+      document.getElementById('statsSection').style.display = 'block';
+    }
+
+    async function loadHistory() {
+      if (!gatewayUrl) {
+        showMessage('Please set Gateway URL first', 'error');
+        return;
+      }
+
+      try {
+        const limit = document.getElementById('limitSelect').value;
+        showMessage('Loading history...', 'info');
+        
+        const response = await fetch(`${gatewayUrl}/api/gameplay/history?limit=${limit}`, {
+          headers: {
+            'ngrok-skip-browser-warning': 'true'
+          }
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const data = await response.json();
+        currentData = data;
+        displayHistory(data);
+        showMessage(`Loaded ${data.count} history records`, 'success');
+      } catch (error) {
+        showMessage(`Error loading history: ${error.message}`, 'error');
+        console.error('History error:', error);
+      }
+    }
+
+    function displayHistory(data) {
+      const tableDiv = document.getElementById('historyTable');
+      
+      if (!data.history || data.history.length === 0) {
+        tableDiv.innerHTML = '<p style="padding: 20px; color: #888;">No history records found.</p>';
+        document.getElementById('historySection').style.display = 'block';
+        return;
+      }
+
+      let html = `
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Session</th>
+              <th>Prize</th>
+              <th>Type</th>
+              <th>Timestamp</th>
+              <th>Device</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      data.history.forEach(entry => {
+        const timestamp = new Date(entry.timestamp || entry.created_at).toLocaleString();
+        const device = entry.device_info ? (typeof entry.device_info === 'string' ? JSON.parse(entry.device_info) : entry.device_info) : {};
+        const deviceType = device.device?.type || 'unknown';
+        const os = device.os?.name || 'unknown';
+        
+        html += `
+          <tr>
+            <td>${entry.id || '-'}</td>
+            <td style="font-size: 11px; color: #888;">${(entry.session_id || '').substring(0, 20)}...</td>
+            <td><strong>${entry.prize_label || entry.prize_id || '-'}</strong></td>
+            <td>${entry.type || 'spin'}</td>
+            <td style="font-size: 11px;">${timestamp}</td>
+            <td style="font-size: 11px;">${deviceType} / ${os}</td>
+          </tr>
+        `;
+      });
+
+      html += `
+          </tbody>
+        </table>
+      `;
+
+      tableDiv.innerHTML = html;
+      document.getElementById('historySection').style.display = 'block';
+      document.getElementById('rawDataSection').style.display = 'block';
+      document.getElementById('rawData').textContent = JSON.stringify(data, null, 2);
+    }
+
+    function toggleRawData() {
+      const rawDiv = document.getElementById('rawData');
+      rawDiv.style.display = rawDiv.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function refreshAll() {
+      if (gatewayUrl) {
+        loadStats();
+        loadHistory();
+      } else {
+        showMessage('Please set Gateway URL first', 'error');
+      }
+    }
+
+    // Auto-refresh every 30 seconds
+    setInterval(() => {
+      if (gatewayUrl && document.getElementById('statsSection').style.display !== 'none') {
+        loadStats();
+        loadHistory();
+      }
+    }, 30000);
+  </script>
+</body>
+</html>
+

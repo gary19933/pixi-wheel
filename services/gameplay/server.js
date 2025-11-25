@@ -90,13 +90,14 @@ let gameConfig = {
   guaranteedPrize: null,
   guaranteedPrizeEnabled: false,
   guaranteedSpinCount: 5,
-  guaranteedPrizeSequence: []
+  guaranteedPrizeSequence: [],
+  termsAndConditions: null
 };
 
 // Update game configuration endpoint
 app.post('/config', async (req, res) => {
   try {
-    const { prizes, guaranteedPrize, guaranteedPrizeEnabled, guaranteedSpinCount, guaranteedPrizeSequence } = req.body;
+    const { prizes, guaranteedPrize, guaranteedPrizeEnabled, guaranteedSpinCount, guaranteedPrizeSequence, termsAndConditions } = req.body;
     
     const configUpdate = {
       prizes: prizes && Array.isArray(prizes) ? prizes : gameConfig.prizes,
@@ -105,7 +106,8 @@ app.post('/config', async (req, res) => {
       guaranteedSpinCount: guaranteedSpinCount !== undefined 
         ? Math.max(2, Math.min(prizes?.length || 100, guaranteedSpinCount)) 
         : gameConfig.guaranteedSpinCount,
-      guaranteedPrizeSequence: guaranteedPrizeSequence !== undefined ? guaranteedPrizeSequence : gameConfig.guaranteedPrizeSequence
+      guaranteedPrizeSequence: guaranteedPrizeSequence !== undefined ? guaranteedPrizeSequence : gameConfig.guaranteedPrizeSequence,
+      termsAndConditions: termsAndConditions !== undefined ? termsAndConditions : gameConfig.termsAndConditions
     };
     
     if (isDatabaseAvailable()) {
@@ -141,6 +143,66 @@ app.get('/config', async (req, res) => {
     }
   } catch (error) {
     console.error('Config get error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Terms & Conditions endpoints
+app.get('/terms', async (req, res) => {
+  try {
+    if (isDatabaseAvailable()) {
+      const config = await db.getConfig();
+      res.json({
+        success: true,
+        termsAndConditions: config.termsAndConditions || null,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.json({
+        success: true,
+        termsAndConditions: gameConfig.termsAndConditions || null,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Terms get error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/terms', async (req, res) => {
+  try {
+    const { termsAndConditions } = req.body;
+    
+    if (termsAndConditions === undefined) {
+      return res.status(400).json({ error: 'termsAndConditions is required' });
+    }
+    
+    if (isDatabaseAvailable()) {
+      // Get current config
+      const currentConfig = await db.getConfig();
+      // Update only terms
+      const configUpdate = {
+        ...currentConfig,
+        termsAndConditions: termsAndConditions
+      };
+      await db.updateConfig(configUpdate);
+      const updatedConfig = await db.getConfig();
+      res.json({
+        success: true,
+        termsAndConditions: updatedConfig.termsAndConditions,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      gameConfig.termsAndConditions = termsAndConditions;
+      res.json({
+        success: true,
+        termsAndConditions: gameConfig.termsAndConditions,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Terms update error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -245,7 +307,12 @@ app.post('/spin', async (req, res) => {
       spinCount: currentSpin,
       usedSequence: useSequencePrize ? true : false,
       usedGuaranteed: useGuaranteedPrize,
-      device: deviceInfo
+      device: deviceInfo,
+      // Include config snapshot for history
+      guaranteedPrize: guaranteedPrize || null,
+      guaranteedPrizeEnabled: guaranteedPrizeEnabled !== undefined ? guaranteedPrizeEnabled : null,
+      guaranteedSpinCount: guaranteedSpinCount || null,
+      guaranteedPrizeSequence: guaranteedPrizeSequence || null
     };
 
     // Store in history
@@ -324,6 +391,160 @@ app.post('/claim', async (req, res) => {
     res.json({ success: true, claim });
   } catch (error) {
     console.error('Claim error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========== GUARANTEED PRIZE MANAGEMENT (for 3rd party) ==========
+
+// Get guaranteed prize settings
+app.get('/guaranteed-prize', async (req, res) => {
+  try {
+    if (isDatabaseAvailable()) {
+      const config = await db.getConfig();
+      res.json({
+        success: true,
+        guaranteedPrize: config.guaranteedPrize || null,
+        guaranteedPrizeEnabled: config.guaranteedPrizeEnabled || false,
+        guaranteedSpinCount: config.guaranteedSpinCount || 5,
+        guaranteedPrizeSequence: config.guaranteedPrizeSequence || [],
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.json({
+        success: true,
+        guaranteedPrize: gameConfig.guaranteedPrize || null,
+        guaranteedPrizeEnabled: gameConfig.guaranteedPrizeEnabled || false,
+        guaranteedSpinCount: gameConfig.guaranteedSpinCount || 5,
+        guaranteedPrizeSequence: gameConfig.guaranteedPrizeSequence || [],
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Guaranteed prize get error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update guaranteed prize settings
+app.put('/guaranteed-prize', async (req, res) => {
+  try {
+    const { 
+      guaranteedPrize,
+      guaranteedPrizeEnabled,
+      guaranteedSpinCount,
+      guaranteedPrizeSequence
+    } = req.body;
+    
+    if (isDatabaseAvailable()) {
+      // Get current config
+      const currentConfig = await db.getConfig();
+      
+      // Update only guaranteed prize settings
+      const configUpdate = {
+        ...currentConfig,
+        guaranteedPrize: guaranteedPrize !== undefined ? guaranteedPrize : currentConfig.guaranteedPrize,
+        guaranteedPrizeEnabled: guaranteedPrizeEnabled !== undefined ? guaranteedPrizeEnabled : currentConfig.guaranteedPrizeEnabled,
+        guaranteedSpinCount: guaranteedSpinCount !== undefined 
+          ? Math.max(2, Math.min(100, guaranteedSpinCount)) 
+          : currentConfig.guaranteedSpinCount,
+        guaranteedPrizeSequence: guaranteedPrizeSequence !== undefined ? guaranteedPrizeSequence : currentConfig.guaranteedPrizeSequence
+      };
+      
+      await db.updateConfig(configUpdate);
+      const updatedConfig = await db.getConfig();
+      
+      res.json({
+        success: true,
+        guaranteedPrize: updatedConfig.guaranteedPrize || null,
+        guaranteedPrizeEnabled: updatedConfig.guaranteedPrizeEnabled || false,
+        guaranteedSpinCount: updatedConfig.guaranteedSpinCount || 5,
+        guaranteedPrizeSequence: updatedConfig.guaranteedPrizeSequence || [],
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      // In-memory fallback
+      if (guaranteedPrize !== undefined) gameConfig.guaranteedPrize = guaranteedPrize;
+      if (guaranteedPrizeEnabled !== undefined) gameConfig.guaranteedPrizeEnabled = guaranteedPrizeEnabled;
+      if (guaranteedSpinCount !== undefined) {
+        gameConfig.guaranteedSpinCount = Math.max(2, Math.min(100, guaranteedSpinCount));
+      }
+      if (guaranteedPrizeSequence !== undefined) gameConfig.guaranteedPrizeSequence = guaranteedPrizeSequence;
+      
+      res.json({
+        success: true,
+        guaranteedPrize: gameConfig.guaranteedPrize || null,
+        guaranteedPrizeEnabled: gameConfig.guaranteedPrizeEnabled || false,
+        guaranteedSpinCount: gameConfig.guaranteedSpinCount || 5,
+        guaranteedPrizeSequence: gameConfig.guaranteedPrizeSequence || [],
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Guaranteed prize update error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========== PRIZE MANAGEMENT ENDPOINTS (for 3rd party) ==========
+
+// Get prizes
+app.get('/prizes', async (req, res) => {
+  try {
+    if (isDatabaseAvailable()) {
+      const config = await db.getConfig();
+      res.json({
+        success: true,
+        prizes: config.prizes || [],
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.json({
+        success: true,
+        prizes: gameConfig.prizes || [],
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Prizes get error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update prizes
+app.put('/prizes', async (req, res) => {
+  try {
+    const { prizes } = req.body;
+    
+    if (!prizes || !Array.isArray(prizes)) {
+      return res.status(400).json({ error: 'prizes must be an array' });
+    }
+    
+    if (isDatabaseAvailable()) {
+      // Get current config
+      const currentConfig = await db.getConfig();
+      // Update only prizes
+      const configUpdate = {
+        ...currentConfig,
+        prizes: prizes
+      };
+      await db.updateConfig(configUpdate);
+      const updatedConfig = await db.getConfig();
+      res.json({
+        success: true,
+        prizes: updatedConfig.prizes,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      gameConfig.prizes = prizes;
+      res.json({
+        success: true,
+        prizes: gameConfig.prizes,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Prizes update error:', error);
     res.status(500).json({ error: error.message });
   }
 });

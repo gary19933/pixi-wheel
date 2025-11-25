@@ -1040,7 +1040,8 @@
         guaranteedPrizeEnabled: active.settings?.guaranteedPrizeEnabled || false,
         guaranteedSpinCount: active.settings?.guaranteedSpinCount || 5,
         guaranteedPrizeSequence: active.settings?.guaranteedPrizeSequence || [],
-        designConfig: designConfig
+        designConfig: designConfig,
+        termsAndConditions: active.terms || null
       };
       
       const response = await fetch(`${MICROSERVICE_GATEWAY}/api/gameplay/config`, {

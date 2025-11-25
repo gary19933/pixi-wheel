@@ -11,14 +11,23 @@ export function initDatabase() {
   }
 
   try {
+    // Clean up connection string (remove psql command if present)
+    let connectionString = process.env.DATABASE_URL;
+    if (connectionString) {
+      // Remove 'psql' prefix and quotes if present
+      connectionString = connectionString.replace(/^psql\s+['"]?/, '').replace(/['"]\s*$/, '');
+      // Remove channel_binding=require if present (can cause issues)
+      connectionString = connectionString.replace(/[&?]channel_binding=require/g, '');
+    }
+    
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: connectionString,
       ssl: {
         rejectUnauthorized: false // Required for Neon
       },
       max: 20, // Maximum number of clients in the pool
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: 10000, // Increased timeout
     });
 
     // Test connection
@@ -60,6 +69,7 @@ export async function createTables() {
         spin_count INTEGER,
         used_sequence BOOLEAN DEFAULT false,
         used_guaranteed BOOLEAN DEFAULT false,
+        config_snapshot JSONB,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
@@ -75,35 +85,80 @@ export async function createTables() {
       ON game_history(created_at DESC)
     `);
 
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_game_history_template 
+      ON game_history(template)
+    `);
+
     // Sessions table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS game_sessions (
         id VARCHAR(255) PRIMARY KEY,
         created_at TIMESTAMP DEFAULT NOW(),
         spins INTEGER DEFAULT 0,
+        max_spins INTEGER DEFAULT NULL,
         claims JSONB DEFAULT '[]'::jsonb,
-        device_info JSONB
+        device_info JSONB,
+        template VARCHAR(255),
+        player_id VARCHAR(255)
       )
     `);
 
-    // Game config table
+    // Templates table (stores template metadata)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS templates (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        display_name VARCHAR(255),
+        description TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        is_active BOOLEAN DEFAULT true
+      )
+    `);
+
+    // Game config table (one per template) - updated schema to match backend
     await pool.query(`
       CREATE TABLE IF NOT EXISTS game_config (
-        id INTEGER PRIMARY KEY DEFAULT 1,
+        id SERIAL PRIMARY KEY,
+        template_id INTEGER REFERENCES templates(id) ON DELETE CASCADE,
+        template_name VARCHAR(255) NOT NULL,
         prizes JSONB DEFAULT '[]'::jsonb,
         guaranteed_prize VARCHAR(255),
         guaranteed_prize_enabled BOOLEAN DEFAULT false,
         guaranteed_spin_count INTEGER DEFAULT 5,
         guaranteed_prize_sequence JSONB DEFAULT '[]'::jsonb,
-        updated_at TIMESTAMP DEFAULT NOW()
+        design_config JSONB DEFAULT '{}'::jsonb,
+        terms_and_conditions TEXT,
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(template_id, template_name)
       )
     `);
 
-    // Insert default config if not exists
+    // Create indexes for template queries
     await pool.query(`
-      INSERT INTO game_config (id, prizes)
-      VALUES (1, '[]'::jsonb)
-      ON CONFLICT (id) DO NOTHING
+      CREATE INDEX IF NOT EXISTS idx_game_config_template_id 
+      ON game_config(template_id)
+    `);
+    
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_game_config_template_name 
+      ON game_config(template_name)
+    `);
+
+    // Insert default template if not exists
+    await pool.query(`
+      INSERT INTO templates (name, display_name, description)
+      VALUES ('default', 'Default Template', 'Default spin wheel template')
+      ON CONFLICT (name) DO NOTHING
+    `);
+    
+    // Insert default config for default template
+    await pool.query(`
+      INSERT INTO game_config (template_id, template_name, prizes)
+      SELECT id, 'default', '[]'::jsonb
+      FROM templates WHERE name = 'default'
+      ON CONFLICT (template_id, template_name) DO NOTHING
     `);
 
     console.log('✅ Database tables initialized');
@@ -115,16 +170,48 @@ export async function createTables() {
 
 // Database helper functions
 export const db = {
+  // Helper function to convert timestamp to ISO string
+  toISOString(ts) {
+    if (!ts) return new Date().toISOString();
+    // If it's a number (Unix timestamp in ms), convert it
+    if (typeof ts === 'number') {
+      return new Date(ts).toISOString();
+    }
+    // If it's a string that looks like a number, convert it
+    if (typeof ts === 'string' && /^\d+$/.test(ts)) {
+      return new Date(parseInt(ts)).toISOString();
+    }
+    // If it's already an ISO string, use it
+    if (typeof ts === 'string' && ts.includes('T')) {
+      return ts;
+    }
+    // Try to parse as date
+    const date = new Date(ts);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString();
+    }
+    // Fallback to current time
+    return new Date().toISOString();
+  },
+
   // Save spin result
   async saveSpinResult(result) {
     if (!pool) return null;
     
     try {
+      // Create config snapshot from result
+      const configSnapshot = {
+        guaranteedPrize: result.guaranteedPrize || null,
+        guaranteedPrizeEnabled: result.guaranteedPrizeEnabled !== undefined ? result.guaranteedPrizeEnabled : null,
+        guaranteedSpinCount: result.guaranteedSpinCount || null,
+        guaranteedPrizeSequence: result.guaranteedPrizeSequence || null
+      };
+      
       const query = `
         INSERT INTO game_history 
         (session_id, prize_id, prize_label, weight, probability, timestamp, 
-         device_info, type, animation, spin_count, used_sequence, used_guaranteed)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         device_info, type, animation, spin_count, used_sequence, used_guaranteed, config_snapshot)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id
       `;
       
@@ -134,13 +221,14 @@ export const db = {
         result.prize?.label || result.prizeLabel,
         result.prize?.weight || result.weight,
         result.probability,
-        result.timestamp || new Date().toISOString(),
+        this.toISOString(result.timestamp),
         JSON.stringify(result.device || {}),
         'spin',
         JSON.stringify(result.animation || {}),
         result.spinCount || null,
         result.usedSequence || false,
-        result.usedGuaranteed || false
+        result.usedGuaranteed || false,
+        JSON.stringify(configSnapshot)
       ];
 
       const res = await pool.query(query, values);
@@ -170,8 +258,8 @@ export const db = {
         claim.prize,
         claim.weight,
         claim.probability,
-        claim.timestamp || new Date().toISOString(),
-        claim.claimedAt || new Date().toISOString(),
+        this.toISOString(claim.timestamp),
+        this.toISOString(claim.claimedAt),
         claim.template || 'default',
         JSON.stringify(claim.device || {}),
         'claim'
@@ -228,7 +316,8 @@ export const db = {
         animation: row.animation,
         spinCount: row.spin_count,
         usedSequence: row.used_sequence,
-        usedGuaranteed: row.used_guaranteed
+        usedGuaranteed: row.used_guaranteed,
+        configSnapshot: row.config_snapshot || null
       }));
     } catch (error) {
       console.error('Error getting history:', error);
@@ -324,7 +413,8 @@ export const db = {
           guaranteedPrize: null,
           guaranteedPrizeEnabled: false,
           guaranteedSpinCount: 5,
-          guaranteedPrizeSequence: []
+          guaranteedPrizeSequence: [],
+          termsAndConditions: null
         };
       }
       
@@ -334,7 +424,8 @@ export const db = {
         guaranteedPrize: row.guaranteed_prize,
         guaranteedPrizeEnabled: row.guaranteed_prize_enabled || false,
         guaranteedSpinCount: row.guaranteed_spin_count || 5,
-        guaranteedPrizeSequence: row.guaranteed_prize_sequence || []
+        guaranteedPrizeSequence: row.guaranteed_prize_sequence || [],
+        termsAndConditions: row.terms_and_conditions || null
       };
     } catch (error) {
       console.error('Error getting config:', error);
@@ -360,6 +451,7 @@ export const db = {
         guaranteed_prize_enabled = $3,
         guaranteed_spin_count = $4,
         guaranteed_prize_sequence = $5,
+        terms_and_conditions = $6,
         updated_at = NOW()
         WHERE id = 1
         RETURNING *
@@ -370,7 +462,8 @@ export const db = {
         config.guaranteedPrize || null,
         config.guaranteedPrizeEnabled || false,
         config.guaranteedSpinCount || 5,
-        JSON.stringify(config.guaranteedPrizeSequence || [])
+        JSON.stringify(config.guaranteedPrizeSequence || []),
+        config.termsAndConditions || null
       ];
 
       const res = await pool.query(query, values);

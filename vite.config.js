@@ -19,7 +19,19 @@ export default defineConfig({
       '.ngrok-free.app',
       '.ngrok.app',
       '.ngrok.io'
-    ]
+    ],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false
+      },
+      '/health': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false
+      }
+    }
   },
   define: {
     // Inject environment variables at build time

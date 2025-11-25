@@ -118,7 +118,8 @@ let gameConfig = {
   guaranteedPrize: null,
   guaranteedPrizeEnabled: false,
   guaranteedSpinCount: 5,
-  guaranteedPrizeSequence: []
+  guaranteedPrizeSequence: [],
+  termsAndConditions: null
 };
 
 // ==================== API ENDPOINTS ====================
@@ -169,7 +170,8 @@ app.post('/api/gameplay/config', async (req, res) => {
       guaranteedPrizeSequence,
       designConfig,
       displayName,
-      description
+      description,
+      termsAndConditions
     } = req.body;
     
     const configUpdate = {
@@ -182,7 +184,8 @@ app.post('/api/gameplay/config', async (req, res) => {
       guaranteedPrizeSequence: guaranteedPrizeSequence !== undefined ? guaranteedPrizeSequence : gameConfig.guaranteedPrizeSequence,
       designConfig: designConfig || {},
       displayName: displayName,
-      description: description
+      description: description,
+      termsAndConditions: termsAndConditions !== undefined ? termsAndConditions : gameConfig.termsAndConditions
     };
     
     if (isDatabaseAvailable()) {
@@ -346,7 +349,12 @@ app.post('/api/gameplay/spin', async (req, res) => {
       spinCount: spinCount || 1,
       usedSequence: useSequencePrize ? true : false,
       usedGuaranteed: useGuaranteedPrize,
-      device: deviceInfo
+      device: deviceInfo,
+      // Include config snapshot for history
+      guaranteedPrize: guaranteedPrize || null,
+      guaranteedPrizeEnabled: guaranteedPrizeEnabled !== undefined ? guaranteedPrizeEnabled : null,
+      guaranteedSpinCount: guaranteedSpinCount || null,
+      guaranteedPrizeSequence: guaranteedPrizeSequence || null
     };
 
     // Store in history
@@ -554,9 +562,27 @@ app.get('/api/gameplay/history', async (req, res) => {
         sessionId || null,
         template || null
       );
+      
+      // Enhance history entries with guaranteed prize info from configSnapshot
+      const enhancedHistory = history.map(entry => {
+        const configSnapshot = entry.configSnapshot || {};
+        return {
+          ...entry,
+          // Include guaranteed prize settings at top level for easier access
+          guaranteedPrize: configSnapshot.guaranteedPrize || entry.guaranteedPrize || null,
+          guaranteedPrizeEnabled: configSnapshot.guaranteedPrizeEnabled !== undefined 
+            ? configSnapshot.guaranteedPrizeEnabled 
+            : (entry.guaranteedPrizeEnabled !== undefined ? entry.guaranteedPrizeEnabled : null),
+          guaranteedSpinCount: configSnapshot.guaranteedSpinCount || entry.guaranteedSpinCount || null,
+          guaranteedPrizeSequence: configSnapshot.guaranteedPrizeSequence || entry.guaranteedPrizeSequence || null,
+          // Keep configSnapshot for full details
+          configSnapshot: configSnapshot
+        };
+      });
+      
       res.json({
-        count: history.length,
-        history: history,
+        count: enhancedHistory.length,
+        history: enhancedHistory,
         template: template || 'all'
       });
     } else {
@@ -567,9 +593,25 @@ app.get('/api/gameplay/history', async (req, res) => {
       if (template) {
         history = history.filter(h => h.template === template);
       }
+      
+      // Enhance in-memory history entries
+      const enhancedHistory = history.slice(-parseInt(limit)).map(entry => ({
+        ...entry,
+        guaranteedPrize: entry.guaranteedPrize || null,
+        guaranteedPrizeEnabled: entry.guaranteedPrizeEnabled !== undefined ? entry.guaranteedPrizeEnabled : null,
+        guaranteedSpinCount: entry.guaranteedSpinCount || null,
+        guaranteedPrizeSequence: entry.guaranteedPrizeSequence || null,
+        configSnapshot: {
+          guaranteedPrize: entry.guaranteedPrize || null,
+          guaranteedPrizeEnabled: entry.guaranteedPrizeEnabled !== undefined ? entry.guaranteedPrizeEnabled : null,
+          guaranteedSpinCount: entry.guaranteedSpinCount || null,
+          guaranteedPrizeSequence: entry.guaranteedPrizeSequence || null
+        }
+      }));
+      
       res.json({
-        count: history.length,
-        history: history.slice(-parseInt(limit)),
+        count: enhancedHistory.length,
+        history: enhancedHistory,
         template: template || 'all'
       });
     }
@@ -779,6 +821,266 @@ app.get('/api/gameplay/player/:playerId/spins', async (req, res) => {
   }
 });
 
+// ========== GUARANTEED PRIZE MANAGEMENT (for 3rd party) ==========
+
+// Get guaranteed prize settings
+app.get('/api/gameplay/guaranteed-prize', async (req, res) => {
+  try {
+    const { template = 'default' } = req.query;
+    
+    if (isDatabaseAvailable()) {
+      const config = await db.getConfig(template);
+      res.json({
+        success: true,
+        template: template,
+        guaranteedPrize: config.guaranteedPrize || null,
+        guaranteedPrizeEnabled: config.guaranteedPrizeEnabled || false,
+        guaranteedSpinCount: config.guaranteedSpinCount || 5,
+        guaranteedPrizeSequence: config.guaranteedPrizeSequence || [],
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.json({
+        success: true,
+        template: template,
+        guaranteedPrize: gameConfig.guaranteedPrize || null,
+        guaranteedPrizeEnabled: gameConfig.guaranteedPrizeEnabled || false,
+        guaranteedSpinCount: gameConfig.guaranteedSpinCount || 5,
+        guaranteedPrizeSequence: gameConfig.guaranteedPrizeSequence || [],
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Guaranteed prize get error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update guaranteed prize settings
+app.put('/api/gameplay/guaranteed-prize', async (req, res) => {
+  try {
+    const { 
+      template = 'default',
+      guaranteedPrize,
+      guaranteedPrizeEnabled,
+      guaranteedSpinCount,
+      guaranteedPrizeSequence
+    } = req.body;
+    
+    if (isDatabaseAvailable()) {
+      // Get current config
+      const currentConfig = await db.getConfig(template);
+      
+      // Update only guaranteed prize settings
+      const configUpdate = {
+        ...currentConfig,
+        guaranteedPrize: guaranteedPrize !== undefined ? guaranteedPrize : currentConfig.guaranteedPrize,
+        guaranteedPrizeEnabled: guaranteedPrizeEnabled !== undefined ? guaranteedPrizeEnabled : currentConfig.guaranteedPrizeEnabled,
+        guaranteedSpinCount: guaranteedSpinCount !== undefined 
+          ? Math.max(2, Math.min(100, guaranteedSpinCount)) 
+          : currentConfig.guaranteedSpinCount,
+        guaranteedPrizeSequence: guaranteedPrizeSequence !== undefined ? guaranteedPrizeSequence : currentConfig.guaranteedPrizeSequence
+      };
+      
+      await db.updateConfig(configUpdate, template);
+      const updatedConfig = await db.getConfig(template);
+      
+      res.json({
+        success: true,
+        template: template,
+        guaranteedPrize: updatedConfig.guaranteedPrize || null,
+        guaranteedPrizeEnabled: updatedConfig.guaranteedPrizeEnabled || false,
+        guaranteedSpinCount: updatedConfig.guaranteedSpinCount || 5,
+        guaranteedPrizeSequence: updatedConfig.guaranteedPrizeSequence || [],
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      // In-memory fallback
+      if (guaranteedPrize !== undefined) gameConfig.guaranteedPrize = guaranteedPrize;
+      if (guaranteedPrizeEnabled !== undefined) gameConfig.guaranteedPrizeEnabled = guaranteedPrizeEnabled;
+      if (guaranteedSpinCount !== undefined) {
+        gameConfig.guaranteedSpinCount = Math.max(2, Math.min(100, guaranteedSpinCount));
+      }
+      if (guaranteedPrizeSequence !== undefined) gameConfig.guaranteedPrizeSequence = guaranteedPrizeSequence;
+      
+      res.json({
+        success: true,
+        template: template,
+        guaranteedPrize: gameConfig.guaranteedPrize || null,
+        guaranteedPrizeEnabled: gameConfig.guaranteedPrizeEnabled || false,
+        guaranteedSpinCount: gameConfig.guaranteedSpinCount || 5,
+        guaranteedPrizeSequence: gameConfig.guaranteedPrizeSequence || [],
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Guaranteed prize update error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========== PRIZE MANAGEMENT ENDPOINTS (for 3rd party) ==========
+
+// Get prizes for a template
+app.get('/api/gameplay/prizes', async (req, res) => {
+  try {
+    const { template = 'default' } = req.query;
+    
+    if (isDatabaseAvailable()) {
+      const config = await db.getConfig(template);
+      res.json({
+        success: true,
+        template: template,
+        prizes: config.prizes || [],
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.json({
+        success: true,
+        template: template,
+        prizes: gameConfig.prizes || [],
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Prizes get error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update prizes for a template
+app.put('/api/gameplay/prizes', async (req, res) => {
+  try {
+    const { template = 'default', prizes } = req.body;
+    
+    if (!prizes || !Array.isArray(prizes)) {
+      return res.status(400).json({ error: 'prizes must be an array' });
+    }
+    
+    if (isDatabaseAvailable()) {
+      // Get current config
+      const currentConfig = await db.getConfig(template);
+      // Update only prizes
+      const configUpdate = {
+        ...currentConfig,
+        prizes: prizes
+      };
+      await db.updateConfig(configUpdate, template);
+      const updatedConfig = await db.getConfig(template);
+      res.json({
+        success: true,
+        template: template,
+        prizes: updatedConfig.prizes,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      gameConfig.prizes = prizes;
+      res.json({
+        success: true,
+        template: template,
+        prizes: gameConfig.prizes,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Prizes update error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========== SPIN LIMIT MANAGEMENT (for coin system integration) ==========
+
+// Deduct a spin (for coin system - when user spends a coin)
+app.post('/api/gameplay/player/:playerId/spins/deduct', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { template, amount = 1 } = req.body;
+    
+    if (!isDatabaseAvailable()) {
+      return res.status(503).json({ error: 'Database not available' });
+    }
+    
+    // Get current limit and count
+    const limit = await db.getPlayerSpinLimit(playerId, template || null);
+    const currentCount = await db.getPlayerSpinCount(playerId, template || null);
+    
+    if (!limit || limit.max_spins === null) {
+      return res.status(400).json({ 
+        error: 'Player has unlimited spins or no limit set',
+        playerId,
+        currentSpins: currentCount
+      });
+    }
+    
+    const newCount = currentCount + amount;
+    
+    if (newCount > limit.max_spins) {
+      return res.status(403).json({ 
+        error: 'Insufficient spins',
+        playerId,
+        currentSpins: currentCount,
+        maxSpins: limit.max_spins,
+        requested: amount,
+        remainingSpins: Math.max(0, limit.max_spins - currentCount)
+      });
+    }
+    
+    // Update spin count (this happens automatically on claim, but this endpoint allows manual deduction)
+    // For now, we'll just return the status. Actual deduction happens on claim.
+    res.json({
+      success: true,
+      playerId,
+      currentSpins: currentCount,
+      maxSpins: limit.max_spins,
+      remainingSpins: limit.max_spins - currentCount,
+      canDeduct: (limit.max_spins - currentCount) >= amount,
+      message: 'Spin will be deducted when prize is claimed'
+    });
+  } catch (error) {
+    console.error('Deduct spin error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Grant spins (add spins to player - for coin system integration)
+app.post('/api/gameplay/player/:playerId/spins/grant', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { template, additionalSpins } = req.body;
+    
+    if (!isDatabaseAvailable()) {
+      return res.status(503).json({ error: 'Database not available' });
+    }
+    
+    if (!additionalSpins || typeof additionalSpins !== 'number' || additionalSpins <= 0) {
+      return res.status(400).json({ error: 'additionalSpins must be a positive number' });
+    }
+    
+    // Get current limit
+    const limit = await db.getPlayerSpinLimit(playerId, template || null);
+    const currentMax = limit ? limit.max_spins : null;
+    
+    // Calculate new max (add to existing, or set if null)
+    const newMax = currentMax === null ? additionalSpins : currentMax + additionalSpins;
+    
+    // Update the limit
+    const result = await db.setPlayerSpinLimit(playerId, newMax, template || null);
+    
+    res.json({
+      success: true,
+      playerId,
+      previousMaxSpins: currentMax,
+      additionalSpins: additionalSpins,
+      newMaxSpins: result.max_spins,
+      template: result.template,
+      updatedAt: result.updated_at
+    });
+  } catch (error) {
+    console.error('Grant spins error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get session info
 app.get('/api/gameplay/session/:sessionId', async (req, res) => {
   try {
@@ -804,6 +1106,57 @@ app.get('/api/gameplay/session/:sessionId', async (req, res) => {
     res.json(session);
   } catch (error) {
     console.error('Session get error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get player's sessions (all sessions for a player)
+app.get('/api/gameplay/player/:playerId/sessions', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { template } = req.query;
+    
+    if (!isDatabaseAvailable()) {
+      return res.status(503).json({ error: 'Database not available' });
+    }
+    
+    const sessions = await db.getSessionsByPlayerId(playerId, template || null);
+    
+    res.json({
+      playerId,
+      count: sessions.length,
+      sessions: sessions,
+      template: template || 'all'
+    });
+  } catch (error) {
+    console.error('Get player sessions error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get player's current/active session (most recent)
+app.get('/api/gameplay/player/:playerId/session', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { template } = req.query;
+    
+    if (!isDatabaseAvailable()) {
+      return res.status(503).json({ error: 'Database not available' });
+    }
+    
+    const session = await db.getPlayerActiveSession(playerId, template || null);
+    
+    if (!session) {
+      return res.status(404).json({ 
+        error: 'No session found for player',
+        playerId,
+        template: template || 'all'
+      });
+    }
+    
+    res.json(session);
+  } catch (error) {
+    console.error('Get player active session error:', error);
     res.status(500).json({ error: error.message });
   }
 });
